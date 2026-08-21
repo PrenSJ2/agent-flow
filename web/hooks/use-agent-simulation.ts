@@ -9,6 +9,7 @@ import {
   type TimelineEntry,
 } from '@/lib/agent-types'
 import { MOCK_SCENARIO } from '@/lib/mock-scenario'
+import { ALL_SESSIONS } from '@/lib/session-namespace'
 import { TOOL_CARD_W, TOOL_CARD_H, FORCE, TOOL_SLOT, BUBBLE_VISIBLE_S, MODEL_FAMILY_CONTEXT, DEFAULT_CONTEXT_SIZE, FALLBACK_CONTEXT_SIZE, ANIM_SPEED } from '@/lib/canvas-constants'
 import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, type Simulation } from 'd3-force'
 
@@ -227,7 +228,11 @@ export function useAgentSimulation(options: UseAgentSimulationOptions = {}) {
     if (capturedEvents) {
       for (const event of capturedEvents) {
         const activeFilter = sessionFilterRef.current
-        if (activeFilter && event.sessionId && event.sessionId !== activeFilter) {
+        // ALL_SESSIONS is a view, not a session id. Without this line it is
+        // treated as one, every real event fails the equality check, and the
+        // merged canvas silently renders nothing at all.
+        if (activeFilter && activeFilter !== ALL_SESSIONS
+            && event.sessionId && event.sessionId !== activeFilter) {
           continue
         }
         const eventTime = Math.max(event.time || newTime, newTime)

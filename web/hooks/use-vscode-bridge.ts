@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { vscodeBridge, type ConnectionStatus, type AgentEvent, type SessionInfo } from '@/lib/vscode-bridge'
 import { SimulationEvent } from '@/lib/agent-types'
+import { ALL_SESSIONS, namespaceEvent, sessionTag } from '@/lib/session-namespace'
 
 interface BridgeHookResult {
   isVSCode: boolean
@@ -25,6 +26,8 @@ interface BridgeHookResult {
   selectSession: (sessionId: string | null) => void
   /** Flush buffered events for a session into pending. Call from useLayoutEffect after state swap. */
   flushSessionEvents: (sessionId: string, fromIndex?: number) => void
+  /** Flush EVERY session's buffer, namespaced, as one time-ordered stream. */
+  flushAllSessions: () => void
   /** Get the current event count for a session (for save/restore) */
   getSessionEventCount: (sessionId: string) => number
   /** Ref to the currently selected session ID — updated synchronously, not via React state */
@@ -58,6 +61,11 @@ export function useVSCodeBridge(): BridgeHookResult {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const selectedSessionIdRef = useRef<string | null>(null)
   const sessionEventsRef = useRef<Map<string, SimulationEvent[]>>(new Map())
+  // id -> display tag. A ref because `onEvent` runs outside React's render
+  // and needs the current mapping without re-subscribing on every session
+  // list update.
+  const sessionTagsRef = useRef<Map<string, string>>(new Map())
+  const sessionsRef = useRef<SessionInfo[]>([])
   /** True while a session switch is pending (between auto-select and useLayoutEffect).
    *  Prevents the animation frame from processing events in the wrong simulation context. */
   const sessionSwitchPendingRef = useRef(false)
@@ -130,7 +138,14 @@ export function useVSCodeBridge(): BridgeHookResult {
       // Skip if a session switch is pending — useLayoutEffect will flush
       // from the session buffer once the simulation state is swapped.
       const selected = selectedSessionIdRef.current
-      if (selected && event.sessionId === selected && !sessionSwitchPendingRef.current) {
+      if (selected === ALL_SESSIONS && event.sessionId && !sessionSwitchPendingRef.current) {
+        // Namespaced on the way into the shared simulation; the per-session
+        // buffer above keeps the original, so switching back to one session
+        // still replays untagged names.
+        pendingEventsRef.current.push(
+          namespaceEvent(simEvent, tagFor(event.sessionId)))
+        setEventVersion(v => v + 1)
+      } else if (selected && event.sessionId === selected && !sessionSwitchPendingRef.current) {
         pendingEventsRef.current.push(simEvent)
         setEventVersion(v => v + 1)
       } else if (event.sessionId && event.sessionId !== selected) {
@@ -267,6 +282,38 @@ export function useVSCodeBridge(): BridgeHookResult {
 
   /** Flush buffered events for the selected session into pending.
    *  Must be called from useLayoutEffect AFTER simulation state is saved/swapped. */
+  /** The namespace prefix for a session, computed once and then kept. */
+  const tagFor = useCallback((sessionId: string): string => {
+    const known = sessionTagsRef.current.get(sessionId)
+    if (known) return known
+    const tag = sessionTag(sessionsRef.current.find(s => s.id === sessionId), sessionId)
+    sessionTagsRef.current.set(sessionId, tag)
+    return tag
+  }, [])
+
+  /**
+   * Every session's events at once, in one stream.
+   *
+   * Sorted by arrival across sessions rather than concatenated per session:
+   * the simulation advances its clock from event times, so replaying one
+   * session to its end before starting the next would make the second appear
+   * to happen entirely after the first.
+   */
+  useEffect(() => { sessionsRef.current = sessions }, [sessions])
+
+  const flushAllSessions = useCallback(() => {
+    sessionSwitchPendingRef.current = false
+    const merged: SimulationEvent[] = []
+    for (const [sessionId, buffered] of sessionEventsRef.current) {
+      const tag = tagFor(sessionId)
+      for (const event of buffered) merged.push(namespaceEvent(event, tag))
+    }
+    merged.sort((a, b) => (a.time ?? 0) - (b.time ?? 0))
+    pendingEventsRef.current.length = 0
+    pendingEventsRef.current.push(...merged)
+    setEventVersion(v => v + 1)
+  }, [tagFor])
+
   const flushSessionEvents = useCallback((sessionId: string, fromIndex = 0) => {
     sessionSwitchPendingRef.current = false
     const buffered = sessionEventsRef.current.get(sessionId) || []
@@ -312,6 +359,7 @@ export function useVSCodeBridge(): BridgeHookResult {
     selectedSessionIdRef,
     selectSession,
     flushSessionEvents,
+    flushAllSessions,
     getSessionEventCount,
     sessionsWithActivity,
     removeSession,

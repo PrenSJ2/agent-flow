@@ -535,16 +535,28 @@ export async function createRelay(options: RelayOptions): Promise<Relay> {
         sendSSE(res, { type: 'session-list', sessions: sessionList })
       }
 
-      // Replay buffered events for the most recent active session
+      // Replay EVERY session's buffer, most recently active first.
+      //
+      // Only the top session used to be replayed, which is enough while the
+      // client shows one session at a time and switching re-requests nothing.
+      // It is not enough for a view that merges them: a freshly loaded page
+      // had literally never been sent the other sessions' events, so an
+      // all-sessions canvas came up empty and stayed that way until something
+      // happened to move.
+      //
+      // Ordered rather than interleaved because each session's events are
+      // internally ordered and the client sorts the merge by time anyway;
+      // sending them grouped keeps this cheap on a machine with a dozen
+      // sessions buffered.
       const sorted = [...sessionList].sort((a, b) => {
         const aActive = a.status === 'active' ? 1 : 0
         const bActive = b.status === 'active' ? 1 : 0
         if (aActive !== bActive) return bActive - aActive
         return b.lastActivityTime - a.lastActivityTime
       })
-      if (sorted.length > 0) {
-        const buffered = eventBuffer.get(sorted[0].id)
-        if (buffered) {
+      for (const session of sorted) {
+        const buffered = eventBuffer.get(session.id)
+        if (buffered && buffered.length > 0) {
           sendSSE(res, { type: 'agent-event-batch', events: buffered })
         }
       }

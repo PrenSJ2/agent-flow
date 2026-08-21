@@ -21,6 +21,7 @@ import { TimelineEvent, TIMING } from "@/lib/agent-types"
 import { COLORS } from "@/lib/colors"
 
 import { MOCK_DURATION } from "@/lib/mock-scenario"
+import { ALL_SESSIONS } from "@/lib/session-namespace"
 import { MessageFeedPanel } from "./message-feed-panel"
 import { TopBar } from "./top-bar"
 import { useAudioEffects } from "@/hooks/use-audio-effects"
@@ -96,7 +97,9 @@ export function AgentVisualizer() {
   useLayoutEffect(() => {
     if (bridge.selectedSessionId && bridge.selectedSessionId !== prevSelectedRef.current) {
       // Save outgoing session state (if any)
-      if (prevSelectedRef.current !== null) {
+      // ALL is never cached: it is a merge of every other session, so its
+      // snapshot would go stale the moment any of them moved on.
+      if (prevSelectedRef.current !== null && prevSelectedRef.current !== ALL_SESSIONS) {
         sessionCacheRef.current.set(prevSelectedRef.current, {
           snapshot: saveSnapshot(),
           eventCount: bridge.getSessionEventCount(prevSelectedRef.current),
@@ -106,18 +109,26 @@ export function AgentVisualizer() {
       // Restore or cold-start the incoming session, then flush events.
       // Flushing happens HERE (after state swap) to prevent the animation
       // frame from processing events in the wrong simulation context.
-      const cached = sessionCacheRef.current.get(bridge.selectedSessionId)
-      if (cached) {
-        restoreSnapshot(cached.snapshot)
-        bridge.flushSessionEvents(bridge.selectedSessionId, cached.eventCount)
-      } else {
+      if (bridge.selectedSessionId === ALL_SESSIONS) {
+        // Always a cold start. The cached snapshots hold untagged agent names
+        // from single-session views; restoring one and then flushing tagged
+        // events would leave two disconnected copies of the same fleet.
         restart()
-        bridge.flushSessionEvents(bridge.selectedSessionId)
+        bridge.flushAllSessions()
+      } else {
+        const cached = sessionCacheRef.current.get(bridge.selectedSessionId)
+        if (cached) {
+          restoreSnapshot(cached.snapshot)
+          bridge.flushSessionEvents(bridge.selectedSessionId, cached.eventCount)
+        } else {
+          restart()
+          bridge.flushSessionEvents(bridge.selectedSessionId)
+        }
       }
 
       prevSelectedRef.current = bridge.selectedSessionId
     }
-  }, [bridge.selectedSessionId, restart, bridge.flushSessionEvents, saveSnapshot, restoreSnapshot, bridge.getSessionEventCount])
+  }, [bridge.selectedSessionId, restart, bridge.flushSessionEvents, bridge.flushAllSessions, saveSnapshot, restoreSnapshot, bridge.getSessionEventCount])
 
   // Timeline events — incremental: only processes new conversation messages
   const timelineCacheRef = useRef<{

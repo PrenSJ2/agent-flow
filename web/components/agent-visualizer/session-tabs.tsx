@@ -3,6 +3,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { COLORS } from '@/lib/colors'
 import { projectOf, resolveTabColor } from '@/lib/tabcolor'
+import { ALL_SESSIONS } from '@/lib/session-namespace'
 import type { SessionInfo } from '@/lib/vscode-bridge'
 
 interface SessionTabsProps {
@@ -34,8 +35,32 @@ export function SessionTabs({
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
   }, [selectedSessionId])
 
+  const activeCount = sessions.filter(s => s.status === 'active').length
+  const allSelected = selectedSessionId === ALL_SESSIONS
+
   return (
     <div className="flex gap-1">
+      {/* Every session on one canvas. First in the strip because it is the
+          overview the others are views into, and because its position should
+          not move as sessions come and go. */}
+      {sessions.length > 1 && (
+        <button
+          onClick={() => onSelectSession(ALL_SESSIONS)}
+          className="px-1.5 py-0.5 rounded transition-all flex items-center gap-1"
+          style={{
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
+            background: allSelected ? COLORS.tabSelectedBg : COLORS.tabInactiveBg,
+            border: `1px solid ${allSelected ? COLORS.holoBright : COLORS.holoBg10}`,
+            opacity: allSelected ? 1 : 0.82,
+            color: allSelected ? COLORS.holoBright : COLORS.textMuted,
+          }}
+          title="every session's agents on one canvas"
+        >
+          ALL
+          <span style={{ opacity: 0.6 }}>{activeCount || sessions.length}</span>
+        </button>
+      )}
       {sessions.map(session => {
         const isSelected = session.id === selectedSessionId
         const isActive = session.status === 'active'
