@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback } from 'react'
 import { COLORS } from '@/lib/colors'
+import { projectOf, resolveTabColor } from '@/lib/tabcolor'
 import type { SessionInfo } from '@/lib/vscode-bridge'
 
 interface SessionTabsProps {
@@ -41,6 +42,11 @@ export function SessionTabs({
         const hasActivity = sessionsWithActivity.has(session.id)
         // Green dot: session is active, OR has unseen background activity
         const showGreen = isActive || hasActivity
+        const projectColor = resolveTabColor(
+          projectOf(session.cwd ?? session.label),
+          session.cwd,
+        )
+
         return (
           <button
             key={session.id}
@@ -51,7 +57,13 @@ export function SessionTabs({
               flexShrink: 0,
               whiteSpace: 'nowrap',
               background: isSelected ? COLORS.tabSelectedBg : COLORS.tabInactiveBg,
-              border: `1px solid ${isSelected ? COLORS.tabSelectedBorder : COLORS.tabInactiveBorder}`,
+              // Outline in the same colour the terminal gives this project, so
+              // a session here and its iTerm tab read as the same workspace.
+              // Muted when the tab is not selected so the accent stays a cue
+              // rather than a row of competing colours.
+              border: `1px solid ${projectColor}`,
+              boxShadow: isSelected ? `inset 0 0 0 1px ${projectColor}` : 'none',
+              opacity: isSelected ? 1 : 0.82,
               color: isSelected ? COLORS.holoBright : COLORS.textMuted,
             }}
           >
