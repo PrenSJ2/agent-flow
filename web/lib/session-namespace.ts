@@ -1,6 +1,6 @@
 import type { SessionInfo } from './bridge-types'
 import type { SimulationEvent } from './agent-types'
-import { projectOf } from './tabcolor'
+import { projectOf, resolveTabColor } from './tabcolor'
 
 /**
  * Making several sessions' events safe to pour into one simulation.
@@ -68,4 +68,23 @@ export function namespaceEvent(event: SimulationEvent, tag: string): SimulationE
     next[field] = `${tag}/${value}`
   }
   return next ? { ...event, payload: next } : event
+}
+
+
+/**
+ * The colour of the session an agent belongs to, or null if it has none.
+ *
+ * Only tagged names have one, which means only the merged ALL view is
+ * affected: in a single-session view every node belongs to the same session
+ * and the colour would say nothing, so state colour is left alone there.
+ *
+ * The hue is the same one the session's tab and the terminal tab use, so a
+ * node, a tab and a terminal window all agree about which piece of work this
+ * is.
+ */
+export function sessionColorOf(agentName: string): string | null {
+  const tag = tagOf(agentName)
+  if (!tag) return null
+  const repo = tag.includes('#') ? tag.slice(0, tag.indexOf('#')) : tag
+  return repo ? resolveTabColor(repo) : null
 }

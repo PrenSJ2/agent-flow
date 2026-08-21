@@ -1,10 +1,11 @@
 import { Agent, NODE, ANIM } from '@/lib/agent-types'
 import { COLORS, getStateColor, contextSegments } from '@/lib/colors'
+import { sessionColorOf, stripTag } from '@/lib/session-namespace'
 import {
   AGENT_DRAW, CONTEXT_BAR, CONTEXT_RING, STATS_OVERLAY,
 } from '@/lib/canvas-constants'
 import { alphaHex, formatTokens } from '@/lib/utils'
-import { truncateText, drawHexagon, CLAUDE_SPARK_D, OPENAI_LOGO_D, OPENAI_LOGO_VIEWBOX } from './draw-misc'
+import { truncateText, drawPolygon, sidesForDepth, CLAUDE_SPARK_D, OPENAI_LOGO_D, OPENAI_LOGO_VIEWBOX } from './draw-misc'
 import { getAgentGlowSprite } from './render-cache'
 
 let _claudeSparkPath: Path2D | null = null
@@ -174,18 +175,24 @@ export function drawContextRing(
 }
 
 function drawDepthShadow(ctx: CanvasRenderingContext2D, agent: Agent, r: number) {
+  // One side per level of delegation, so every ring and ripple on
+  // this node agrees with the node itself.
+  const sides = sidesForDepth(agent.depth)
   ctx.save()
   ctx.shadowColor = 'rgba(0, 0, 0, 0.5)'
   ctx.shadowBlur = AGENT_DRAW.shadowBlur
   ctx.shadowOffsetX = AGENT_DRAW.shadowOffsetX
   ctx.shadowOffsetY = AGENT_DRAW.shadowOffsetY
-  drawHexagon(ctx, agent.x, agent.y, r * 0.9)
+  drawPolygon(ctx, agent.x, agent.y, r * 0.9, sides)
   ctx.fillStyle = COLORS.cardBgFaintOverlay
   ctx.fill()
   ctx.restore()
 }
 
 function drawAgentGlow(ctx: CanvasRenderingContext2D, agent: Agent, r: number, color: string, isHovered: boolean, isSelected: boolean, isWaiting: boolean) {
+  // One side per level of delegation, so every ring and ripple on
+  // this node agrees with the node itself.
+  const sides = sidesForDepth(agent.depth)
   const glowR = r + AGENT_DRAW.glowPadding
   const glowAlpha = isHovered || isSelected ? 0.35 : isWaiting ? 0.3 : agent.state === 'thinking' ? 0.2 : 0.1
   // Pre-rendered glow sprite instead of per-frame gradient creation
@@ -193,22 +200,25 @@ function drawAgentGlow(ctx: CanvasRenderingContext2D, agent: Agent, r: number, c
   ctx.drawImage(sprite, agent.x - Math.ceil(glowR), agent.y - Math.ceil(glowR))
 
   // Ambient outer hex ring
-  drawHexagon(ctx, agent.x, agent.y, r + AGENT_DRAW.outerRingOffset)
+  drawPolygon(ctx, agent.x, agent.y, r + AGENT_DRAW.outerRingOffset, sides)
   ctx.strokeStyle = color + '25'
   ctx.lineWidth = 1
   ctx.stroke()
 
   // Inner hex fill
-  drawHexagon(ctx, agent.x, agent.y, r)
+  drawPolygon(ctx, agent.x, agent.y, r, sides)
   ctx.fillStyle = COLORS.nodeInterior
   ctx.fill()
 }
 
 function drawScanline(ctx: CanvasRenderingContext2D, agent: Agent, r: number, color: string, isHovered: boolean, isWaiting: boolean, time: number) {
+  // One side per level of delegation, so every ring and ripple on
+  // this node agrees with the node itself.
+  const sides = sidesForDepth(agent.depth)
   const scanSpeed = agent.state === 'thinking' || isHovered || isWaiting ? ANIM.scanline.thinking : ANIM.scanline.normal
   const scanY = agent.y - r + ((time * scanSpeed) % (r * 2))
   ctx.save()
-  drawHexagon(ctx, agent.x, agent.y, r)
+  drawPolygon(ctx, agent.x, agent.y, r, sides)
   ctx.clip()
   const scanGrad = ctx.createLinearGradient(agent.x, scanY - AGENT_DRAW.scanlineHalfH, agent.x, scanY + AGENT_DRAW.scanlineHalfH)
   const scanAlpha = isHovered ? '35' : '20'
@@ -221,7 +231,10 @@ function drawScanline(ctx: CanvasRenderingContext2D, agent: Agent, r: number, co
 }
 
 function drawStateRing(ctx: CanvasRenderingContext2D, agent: Agent, r: number, color: string, isHovered: boolean, isSelected: boolean, isWaiting: boolean, time: number) {
-  drawHexagon(ctx, agent.x, agent.y, r)
+  // One side per level of delegation, so every ring and ripple on
+  // this node agrees with the node itself.
+  const sides = sidesForDepth(agent.depth)
+  drawPolygon(ctx, agent.x, agent.y, r, sides)
   ctx.strokeStyle = color
   ctx.lineWidth = (isSelected || isHovered) ? 2.5 : 2
   if (agent.state === 'complete') {
@@ -280,13 +293,16 @@ function drawOrbitingParticles(ctx: CanvasRenderingContext2D, agent: Agent, r: n
 }
 
 function drawWaitingRipples(ctx: CanvasRenderingContext2D, agent: Agent, r: number, color: string, time: number) {
+  // One side per level of delegation, so every ring and ripple on
+  // this node agrees with the node itself.
+  const sides = sidesForDepth(agent.depth)
   // Radar ripples — 2 concentric rings expanding outward, staggered
   for (let i = 0; i < 2; i++) {
     const ripplePhase = ((time * 0.65 + i * 0.5) % 1.0)
     const rippleR = r + AGENT_DRAW.rippleInnerOffset + ripplePhase * AGENT_DRAW.rippleMaxExpand
     const rippleAlpha = (1 - ripplePhase) * AGENT_DRAW.rippleMaxAlpha
     ctx.beginPath()
-    drawHexagon(ctx, agent.x, agent.y, rippleR)
+    drawPolygon(ctx, agent.x, agent.y, rippleR, sides)
     ctx.strokeStyle = color + alphaHex(rippleAlpha)
     ctx.lineWidth = 1.5 * (1 - ripplePhase)
     ctx.stroke()
@@ -312,7 +328,10 @@ function drawAgentLabel(ctx: CanvasRenderingContext2D, agent: Agent, r: number, 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
   const maxLabelW = r * AGENT_DRAW.labelWidthMultiplier
-  const agentLabel = truncateText(ctx, agent.name, maxLabelW)
+  // The session prefix is dropped: the node's colour already says which
+  // session this is, and `cctv#cc75/code-reviewer` spends most of a label's
+  // width repeating it. Untagged names are returned unchanged.
+  const agentLabel = truncateText(ctx, stripTag(agent.name), maxLabelW)
   ctx.fillText(agentLabel, agent.x, agent.y + r + AGENT_DRAW.labelYOffset)
 }
 
@@ -342,7 +361,16 @@ export function drawAgents(
 ) {
   for (const [id, agent] of agents) {
     const radius = agent.isMain ? NODE.radiusMain : NODE.radiusSub
-    const color = getStateColor(agent.state)
+    // On the merged ALL canvas the node takes its session's colour, so which
+    // session a piece of work belongs to is readable at a glance instead of
+    // by tracing edges back to a root. Untagged names -- every single-session
+    // view -- keep the state colour, where the session hue would say nothing.
+    //
+    // Two states keep their own colour regardless: an error and a permission
+    // prompt are the reasons you are looking at the canvas at all, and losing
+    // them to a session tint would be a bad trade.
+    const shouts = agent.state === 'error' || agent.state === 'waiting_permission'
+    const color = (!shouts && sessionColorOf(agent.name)) || getStateColor(agent.state)
     const isHovered = id === hoveredAgentId
     const isSelected = id === selectedAgentId
 

@@ -51,17 +51,44 @@ export function drawTetherLine(ctx: CanvasRenderingContext2D, agent: Agent, tran
   ctx.restore()
 }
 
-/** Draw a regular hexagon centered at (x, y) */
-export function drawHexagon(ctx: CanvasRenderingContext2D, x: number, y: number, radius: number) {
+/**
+ * A regular polygon centred at (x, y). Six sides unless told otherwise.
+ *
+ * Agents are drawn with a side per level of nesting -- a hexagon at the top,
+ * a heptagon for its subagents, an octagon for theirs -- so how deep a piece
+ * of work has been delegated is readable from the shape alone, without
+ * tracing edges back to a root.
+ */
+export function drawPolygon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  sides = 6,
+) {
+  // Below three there is no polygon to draw, and past about a dozen the
+  // difference between n and n+1 sides is a rounding error on screen.
+  const n = Math.max(3, Math.min(POLYGON_MAX_SIDES, Math.round(sides)))
   ctx.beginPath()
-  for (let i = 0; i < 6; i++) {
-    const angle = (Math.PI / 3) * i - Math.PI / 2
+  for (let i = 0; i < n; i++) {
+    // The -PI/2 keeps a vertex at the top for every n, so the family of
+    // shapes shares an orientation instead of appearing to rotate as it
+    // gains sides.
+    const angle = ((Math.PI * 2) / n) * i - Math.PI / 2
     const px = x + radius * Math.cos(angle)
     const py = y + radius * Math.sin(angle)
     if (i === 0) ctx.moveTo(px, py)
     else ctx.lineTo(px, py)
   }
   ctx.closePath()
+}
+
+/** Where the shape stops reading as a polygon and starts reading as a circle. */
+export const POLYGON_MAX_SIDES = 12
+
+/** Sides for an agent nested `depth` levels down. Six at the top. */
+export function sidesForDepth(depth: number | undefined): number {
+  return 6 + Math.max(0, depth ?? 0)
 }
 
 /** Claude spark viewBox size (origin at center via sparkViewBox offset in AGENT_DRAW). */

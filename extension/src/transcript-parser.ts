@@ -22,7 +22,7 @@ import {
   generateSubagentFallbackName,
   resolveSubagentChildName,
 } from './constants'
-import { summarizeInput, summarizeResult, extractInputData, detectError, buildDiscovery } from './tool-summarizer'
+import { summarizeInput, summarizeResult, extractInputData, detectError, buildDiscovery, toolLabel } from './tool-summarizer'
 import { estimateTokensFromContent, estimateTokensFromText } from './token-estimator'
 import { createLogger } from './logger'
 
@@ -271,12 +271,18 @@ export class TranscriptParser {
     sessionId?: string,
   ): void {
     const toolName = block.name
+    // The label is what appears on screen; `toolName` stays raw for the
+    // dispatch check below, which matches on the real tool.
+    const label = toolLabel(toolName, block.input)
     const args = summarizeInput(toolName, block.input)
 
     const rawPath = block.input.file_path || block.input.path
     const filePath = typeof rawPath === 'string' ? rawPath : undefined
     ctxPending.set(block.id, {
-      name: toolName,
+      // The label, not the raw name: `handleToolResult` pairs the end of a
+      // call to its start by this, so the two have to agree or every skill
+      // and MCP call would hang as unfinished.
+      name: label,
       args,
       filePath,
       startTime: Date.now(),
@@ -299,9 +305,9 @@ export class TranscriptParser {
       type: 'tool_call_start',
       payload: {
         agent: agentName,
-        tool: toolName,
+        tool: label,
         args,
-        preview: `${toolName}: ${args}`.slice(0, PREVIEW_MAX),
+        preview: `${label}: ${args}`.slice(0, PREVIEW_MAX),
         inputData: extractInputData(toolName, block.input),
       },
     }, sessionId)
@@ -457,7 +463,12 @@ export class TranscriptParser {
                 const args = summarizeInput(toolBlock.name, toolBlock.input)
                 const rawPath = toolBlock.input.file_path || toolBlock.input.path
                 const filePath = typeof rawPath === 'string' ? rawPath : undefined
-                session.pendingToolCalls.set(toolBlock.id, { name: toolBlock.name, args, filePath, startTime: Date.now() })
+                // Same label as the live path, or a call started before a
+                // reconnect would never pair with its own result.
+                session.pendingToolCalls.set(toolBlock.id, {
+                  name: toolLabel(toolBlock.name, toolBlock.input),
+                  args, filePath, startTime: Date.now(),
+                })
               } else if (block.type === 'tool_result') {
                 const resultBlock = block as ToolResultBlock
                 // Clear matched pending tool call

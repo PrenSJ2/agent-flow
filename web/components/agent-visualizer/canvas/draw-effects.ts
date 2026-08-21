@@ -1,6 +1,6 @@
 import { COLORS } from '@/lib/colors'
 import { SPAWN_FX, COMPLETE_FX } from '@/lib/canvas-constants'
-import { drawHexagon } from './draw-misc'
+import { drawPolygon } from './draw-misc'
 import { alphaHex } from '@/lib/utils'
 
 export interface VisualEffect {
@@ -33,9 +33,11 @@ export function drawEffects(ctx: CanvasRenderingContext2D, effects: VisualEffect
           ctx.fill()
         }
 
-        // Expanding hexagonal ring
+        // Expanding ring. Stays a hexagon whatever the agent's depth: the
+        // effect carries only a position and a colour, and a spawn burst is
+        // a moment rather than a thing being identified.
         ctx.globalAlpha = alpha
-        drawHexagon(ctx, fx.x, fx.y, ringRadius)
+        drawPolygon(ctx, fx.x, fx.y, ringRadius)
         ctx.strokeStyle = fx.color
         ctx.lineWidth = 2 * (1 - progress)
         ctx.stroke()

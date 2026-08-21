@@ -161,9 +161,15 @@ export function handleAgentSpawn(
     y = Math.sin(angle) * ROOT_SPACING
   }
 
+  // Derived once from the parent rather than walked at draw time: the parent
+  // is already in hand here, and a walk would run for every agent on every
+  // frame.
+  const depth = parentId ? ((state.agents.get(parentId)?.depth ?? 0) + 1) : 0
+
   const agent: Agent = {
     id: name, name, state: 'idle',
     parentId: parentId || null,
+    depth,
     tokensUsed: 0, tokensMax: ctx.getContextWindowSize(model),
     contextBreakdown: emptyContextBreakdown(),
     toolCalls: 0, timeAlive: 0,

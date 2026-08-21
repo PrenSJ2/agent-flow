@@ -24,9 +24,59 @@ function tailPath(filePath: string, segments = 2): string {
 }
 
 /** Summarize tool input into a short human-readable string */
+/**
+ * What to call this tool call on screen.
+ *
+ * The raw tool name is often the least interesting part. Every skill
+ * invocation is a call to a tool literally named `Skill`, so a diagram built
+ * on raw names showed 91 identical boxes saying "Skill" and never once named
+ * `brainstorming`. Every MCP tool arrives as `mcp__playwright__browser_click`,
+ * which is the server and the tool welded together with underscores.
+ *
+ * Both are unpacked to the thing that was actually called; where the call came
+ * from -- the plugin, the MCP server -- goes into the args beside it.
+ */
+export function toolLabel(toolName: string, input?: Record<string, unknown>): string {
+  if (toolName === 'Skill') {
+    const skill = String(input?.skill || '').trim()
+    if (skill) {
+      // `superpowers:brainstorming` -> `brainstorming`; the plugin is carried
+      // in the args, so the label stays short enough to read on a node.
+      const leaf = skill.includes(':') ? skill.slice(skill.indexOf(':') + 1) : skill
+      return leaf || toolName
+    }
+  }
+  const mcp = parseMcpToolName(toolName)
+  if (mcp) { return mcp.tool }
+  return toolName
+}
+
+/** `mcp__playwright__browser_click` -> { server: 'playwright', tool: 'browser_click' } */
+export function parseMcpToolName(toolName: string): { server: string; tool: string } | null {
+  if (!toolName.startsWith('mcp__')) { return null }
+  const rest = toolName.slice('mcp__'.length)
+  const cut = rest.indexOf('__')
+  if (cut <= 0) { return null }
+  return { server: rest.slice(0, cut), tool: rest.slice(cut + 2) }
+}
+
 export function summarizeInput(toolName: string, input?: Record<string, unknown>): string {
+  const mcp = parseMcpToolName(toolName)
+  if (mcp) {
+    // The server is the useful context once the label has been shortened to
+    // the tool: "browser_click" alone does not say whose browser.
+    const rest = input ? JSON.stringify(input).slice(0, ARGS_MAX) : ''
+    return rest ? `${mcp.server} · ${rest}` : mcp.server
+  }
   if (!input) { return '' }
   switch (toolName) {
+    case 'Skill': {
+      const skill = String(input.skill || '')
+      const plugin = skill.includes(':') ? skill.slice(0, skill.indexOf(':')) : ''
+      const args = String(input.args || '').slice(0, ARGS_MAX)
+      // The plugin is the part the raw name threw away.
+      return [plugin && `${plugin} plugin`, args].filter(Boolean).join(' · ') || 'skill'
+    }
     case 'Bash':
       return String(input.command || '').slice(0, ARGS_MAX)
     case 'Read':
