@@ -12,8 +12,6 @@ import { GlassContextMenu } from "./glass-context-menu"
 import { ToolDetailPopup } from "./tool-detail-popup"
 import { DiscoveryDetailPopup } from "./discovery-detail-popup"
 import { FileAttentionPanel } from "./file-attention-panel"
-import { CapabilityPanel } from "./capability-panel"
-import { MemoryPanel } from "./memory-panel"
 import { TimelinePanel } from "./timeline-panel"
 import { AgentChatPanel } from "./chat-panel"
 import { SessionTranscriptPanel } from "./session-transcript-panel"
@@ -71,19 +69,12 @@ export function AgentVisualizer() {
   const [showTimeline, setShowTimeline] = useState(false)
   const [showFileAttention, setShowFileAttention] = useState(false)
   const [showTranscript, setShowTranscript] = useState(false)
-  // tare's two views: what this machine can do, and what it has learned about
-  // its own use. Both read the local tare console rather than the agent event
-  // stream, so they are side panels here rather than canvas layers.
-  const [showCapabilities, setShowCapabilities] = useState(false)
-  const [showMemory, setShowMemory] = useState(false)
 
   // Mutually exclusive panel toggling — opening one closes the others
-  const toggleExclusivePanel = useCallback((panel: 'files' | 'transcript' | 'cost' | 'capabilities' | 'memory') => {
+  const toggleExclusivePanel = useCallback((panel: 'files' | 'transcript' | 'cost') => {
     setShowFileAttention(prev => panel === 'files' ? !prev : false)
     setShowTranscript(prev => panel === 'transcript' ? !prev : false)
     setShowCostOverlay(prev => panel === 'cost' ? !prev : false)
-    setShowCapabilities(prev => panel === 'capabilities' ? !prev : false)
-    setShowMemory(prev => panel === 'memory' ? !prev : false)
   }, [])
   const [zoomToFitTrigger, setZoomToFitTrigger] = useState(0)
 
@@ -199,8 +190,6 @@ export function AgentVisualizer() {
     toggleHexGrid: () => { setShowHexGrid(prev => !prev) },
     toggleStats: () => { setShowStats(prev => !prev) },
     toggleCostOverlay: () => toggleExclusivePanel('cost'),
-    toggleCapabilities: () => toggleExclusivePanel('capabilities'),
-    toggleMemory: () => toggleExclusivePanel('memory'),
     zoomToFit: () => { setZoomToFitTrigger(n => n + 1) },
     clearSelection: () => { selection.clearAllSelections() },
     deselectAgent: () => { selection.clearAgent() },
@@ -298,8 +287,6 @@ export function AgentVisualizer() {
         onDiscoveryClick={selection.handleDiscoveryClick}
         selectedDiscoveryId={selection.selectedDiscoveryId}
         showCostOverlay={showCostOverlay}
-        showCapabilities={showCapabilities}
-        showMemory={showMemory}
       />
 
       {/* Message feed panel (top-left) */}
@@ -389,16 +376,6 @@ export function AgentVisualizer() {
       />
 
       {/* File attention panel (slide-in from right) */}
-      <CapabilityPanel
-        visible={showCapabilities}
-        onClose={() => setShowCapabilities(false)}
-      />
-
-      <MemoryPanel
-        visible={showMemory}
-        onClose={() => setShowMemory(false)}
-      />
-
       <FileAttentionPanel
         visible={showFileAttention}
         fileAttention={fileAttention}
@@ -436,8 +413,6 @@ export function AgentVisualizer() {
         showFileAttention={showFileAttention}
         showTranscript={showTranscript}
         showCostOverlay={showCostOverlay}
-        showCapabilities={showCapabilities}
-        showMemory={showMemory}
         showTimeline={showTimeline}
         isMuted={isMuted}
         onTogglePanel={toggleExclusivePanel}
