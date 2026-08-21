@@ -48,6 +48,15 @@ export interface HarnessHistory {
   }
 }
 
+export interface HarnessShells {
+  /** Keyed by PROJECT, not by session: a `claude` process exposes its working
+   *  directory and not its session id, so two sessions in one repository
+   *  cannot be told apart from outside. */
+  projects: Record<string, { cmd: string; secs: number; pid: number }[]>
+  services: number
+  unavailable: boolean
+}
+
 export interface HarnessData {
   totals: { live_tokens: number; never_invoked_tokens: number; before: number }
   nodes: HarnessNode[]
@@ -56,6 +65,7 @@ export interface HarnessData {
    *  simply does not send this. A missing field must degrade, not white-screen
    *  the page -- which is exactly what it did before this was optional. */
   history?: HarnessHistory
+  shells?: HarnessShells
   memory: {
     learned: HarnessLearned[]
     projects: Record<string, [string, number][]>

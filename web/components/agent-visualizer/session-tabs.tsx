@@ -12,6 +12,8 @@ interface SessionTabsProps {
   sessionsWithActivity: Set<string>
   onSelectSession: (id: string) => void
   onCloseSession: (id: string) => void
+  followSessions: boolean
+  onToggleFollow: (follow: boolean) => void
 }
 
 export function SessionTabs({
@@ -20,6 +22,8 @@ export function SessionTabs({
   sessionsWithActivity,
   onSelectSession,
   onCloseSession,
+  followSessions,
+  onToggleFollow,
 }: SessionTabsProps) {
   const buttonRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
 
@@ -61,6 +65,25 @@ export function SessionTabs({
           <span style={{ opacity: 0.6 }}>{activeCount || sessions.length}</span>
         </button>
       )}
+      {/* Whether a session waking up takes the view. ALL is never stolen from
+          regardless, so this governs the per-session tabs. */}
+      <button
+        onClick={() => onToggleFollow(!followSessions)}
+        className="px-1.5 py-0.5 rounded transition-all flex items-center gap-1"
+        style={{
+          flexShrink: 0,
+          whiteSpace: 'nowrap',
+          background: 'transparent',
+          border: `1px solid ${COLORS.holoBg10}`,
+          color: followSessions ? COLORS.complete : COLORS.textMuted,
+          opacity: followSessions ? 1 : 0.6,
+        }}
+        title={followSessions
+          ? 'following: a session that wakes up takes the view'
+          : 'not following: the view stays where you put it'}
+      >
+        {followSessions ? '\u29BF' : '\u25CB'} follow
+      </button>
       {sessions.map(session => {
         const isSelected = session.id === selectedSessionId
         const isActive = session.status === 'active'

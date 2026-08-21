@@ -23,6 +23,7 @@ import { COLORS } from "@/lib/colors"
 import { MOCK_DURATION } from "@/lib/mock-scenario"
 import { ALL_SESSIONS } from "@/lib/session-namespace"
 import { MessageFeedPanel } from "./message-feed-panel"
+import { RunningShells } from "./running-shells"
 import { TopBar } from "./top-bar"
 import { useAudioEffects } from "@/hooks/use-audio-effects"
 
@@ -414,6 +415,10 @@ export function AgentVisualizer() {
         onClose={() => setShowTimeline(false)}
       />
 
+      {/* Backgrounded commands, which the canvas cannot show: their tool call
+          finished the moment they were launched. */}
+      <RunningShells />
+
       {/* Top bar: session tabs + info/controls */}
       <TopBar
         sessions={bridge.sessions}
@@ -421,6 +426,8 @@ export function AgentVisualizer() {
         sessionsWithActivity={bridge.sessionsWithActivity}
         onSelectSession={bridge.selectSession}
         onCloseSession={handleCloseSession}
+        followSessions={bridge.followSessions}
+        onToggleFollow={bridge.setFollowSessions}
         isVSCode={bridge.isVSCode}
         connectionStatus={bridge.connectionStatus}
         agentCount={agents.size}

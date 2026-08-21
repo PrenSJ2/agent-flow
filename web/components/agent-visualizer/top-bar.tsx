@@ -83,6 +83,8 @@ export interface TopBarProps {
   sessionsWithActivity: Set<string>
   onSelectSession: (id: string) => void
   onCloseSession: (id: string) => void
+  followSessions: boolean
+  onToggleFollow: (follow: boolean) => void
   // Connection
   isVSCode: boolean
   connectionStatus: ConnectionStatus
@@ -103,6 +105,7 @@ export interface TopBarProps {
 export const TopBar = memo(function TopBar({
   sessions, selectedSessionId, sessionsWithActivity,
   onSelectSession, onCloseSession,
+  followSessions, onToggleFollow,
   isVSCode, connectionStatus,
   agentCount, totalTokens,
   showFileAttention, showTranscript, showCostOverlay, showTimeline, isMuted,
@@ -119,6 +122,8 @@ export const TopBar = memo(function TopBar({
             sessionsWithActivity={sessionsWithActivity}
             onSelectSession={onSelectSession}
             onCloseSession={onCloseSession}
+        followSessions={followSessions}
+        onToggleFollow={onToggleFollow}
           />
         </div>
       )}

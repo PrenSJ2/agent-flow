@@ -5,6 +5,9 @@ import { vscodeBridge, type ConnectionStatus, type AgentEvent, type SessionInfo 
 import { SimulationEvent } from '@/lib/agent-types'
 import { ALL_SESSIONS, namespaceEvent, sessionTag } from '@/lib/session-namespace'
 
+/** Where the follow preference is remembered between reloads. */
+const FOLLOW_KEY = 'tare.followSessions'
+
 interface BridgeHookResult {
   isVSCode: boolean
   connectionStatus: ConnectionStatus
@@ -28,6 +31,9 @@ interface BridgeHookResult {
   flushSessionEvents: (sessionId: string, fromIndex?: number) => void
   /** Flush EVERY session's buffer, namespaced, as one time-ordered stream. */
   flushAllSessions: () => void
+  /** Whether a newly active session steals the view. Persisted. */
+  followSessions: boolean
+  setFollowSessions: (follow: boolean) => void
   /** Get the current event count for a session (for save/restore) */
   getSessionEventCount: (sessionId: string) => number
   /** Ref to the currently selected session ID — updated synchronously, not via React state */
@@ -66,6 +72,21 @@ export function useVSCodeBridge(): BridgeHookResult {
   // list update.
   const sessionTagsRef = useRef<Map<string, string>>(new Map())
   const sessionsRef = useRef<SessionInfo[]>([])
+
+  // Following is on by default because it is what the view has always done,
+  // and off is the deliberate choice. Persisted: having to turn it off again
+  // on every reload is the same annoyance one layer down.
+  const [followSessions, setFollowSessionsState] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    return window.localStorage?.getItem(FOLLOW_KEY) !== 'off'
+  })
+  const followRef = useRef(followSessions)
+  followRef.current = followSessions
+
+  const setFollowSessions = useCallback((follow: boolean) => {
+    setFollowSessionsState(follow)
+    try { window.localStorage?.setItem(FOLLOW_KEY, follow ? 'on' : 'off') } catch { /* private mode */ }
+  }, [])
   /** True while a session switch is pending (between auto-select and useLayoutEffect).
    *  Prevents the animation frame from processing events in the wrong simulation context. */
   const sessionSwitchPendingRef = useRef(false)
@@ -227,13 +248,23 @@ export function useVSCodeBridge(): BridgeHookResult {
           }
           return [...prev, session]
         })
-        // Auto-select newly started session.
-        // Set switch-pending flag to prevent the animation frame from processing
-        // events in the wrong simulation state before useLayoutEffect swaps it.
-        sessionSwitchPendingRef.current = true
-        pendingEventsRef.current.length = 0
-        selectedSessionIdRef.current = session.id
-        setSelectedSessionId(session.id)
+        // Auto-select the newly started session -- unless following is off,
+        // or ALL is showing.
+        //
+        // ALL is never stolen from even with following on: it already shows
+        // the session that just woke up, so switching to that session alone
+        // is strictly less than what was on screen. Sending a message to one
+        // session used to throw you out of the overview every time.
+        const following = followRef.current
+        const onAll = selectedSessionIdRef.current === ALL_SESSIONS
+        if (following && !onAll) {
+          // Set switch-pending so the animation frame does not process events
+          // in the wrong simulation state before useLayoutEffect swaps it.
+          sessionSwitchPendingRef.current = true
+          pendingEventsRef.current.length = 0
+          selectedSessionIdRef.current = session.id
+          setSelectedSessionId(session.id)
+        }
       } else if (type === 'updated') {
         const { sessionId, label } = data as { sessionId: string; label: string }
         setSessions(prev => prev.map(s =>
@@ -360,6 +391,8 @@ export function useVSCodeBridge(): BridgeHookResult {
     selectSession,
     flushSessionEvents,
     flushAllSessions,
+    followSessions,
+    setFollowSessions,
     getSessionEventCount,
     sessionsWithActivity,
     removeSession,
