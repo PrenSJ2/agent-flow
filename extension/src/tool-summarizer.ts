@@ -51,6 +51,22 @@ export function toolLabel(toolName: string, input?: Record<string, unknown>): st
   return toolName
 }
 
+/**
+ * What KIND of thing this call is, for the diagram.
+ *
+ * A skill invocation and a `Bash` call are both "a tool call" to the
+ * transcript, and drawing them identically loses the distinction that
+ * matters: one is the agent running a command, the other is it reaching for
+ * a capability someone installed. Plugins are the same story one level out.
+ */
+export type ToolKind = 'tool' | 'skill' | 'plugin'
+
+export function toolKind(toolName: string): ToolKind {
+  if (toolName === 'Skill') { return 'skill' }
+  if (parseMcpToolName(toolName)) { return 'plugin' }
+  return 'tool'
+}
+
 /** `mcp__playwright__browser_click` -> { server: 'playwright', tool: 'browser_click' } */
 export function parseMcpToolName(toolName: string): { server: string; tool: string } | null {
   if (!toolName.startsWith('mcp__')) { return null }

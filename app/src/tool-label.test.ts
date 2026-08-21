@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { toolLabel, parseMcpToolName, summarizeInput } from '../../extension/src/tool-summarizer'
+import { toolLabel, parseMcpToolName, summarizeInput, toolKind } from '../../extension/src/tool-summarizer'
 
 /**
  * Every input below is a real shape taken from this machine's transcripts:
@@ -56,5 +56,16 @@ test('ordinary tools are left exactly as they were', () => {
   // silently break the heatmap.
   for (const name of ['Bash', 'Read', 'Edit', 'Write', 'Agent', 'Task']) {
     assert.equal(toolLabel(name, { file_path: '/x/y.ts' }), name)
+  }
+})
+
+
+test('a skill and a plugin are distinguishable from a plain tool call', () => {
+  // The diagram draws these as different branches, so the distinction has to
+  // survive the trip from the transcript.
+  assert.equal(toolKind('Skill'), 'skill')
+  assert.equal(toolKind('mcp__playwright__browser_click'), 'plugin')
+  for (const name of ['Bash', 'Read', 'Edit', 'Write', 'Glob']) {
+    assert.equal(toolKind(name), 'tool')
   }
 })

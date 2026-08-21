@@ -35,6 +35,15 @@ export function drawToolCalls(
       ctx.shadowBlur = TOOL_DRAW.errorGlowBase + Math.sin(time * 6) * TOOL_DRAW.errorGlowPulse
     }
 
+    // A skill or a plugin is a capability being reached for, not a command
+    // being run, and drawing all three identically threw that away: an agent
+    // that invoked `brainstorming` looked exactly like one that ran `ls`.
+    // They keep the card shape -- they are still calls with a result -- and
+    // are marked out by hue and a heavier border.
+    const kindColor = tool.kind === 'skill' ? COLORS.dispatch
+      : tool.kind === 'plugin' ? COLORS.contextReasoning
+      : null
+
     ctx.beginPath()
     ctx.roundRect(cardX, cardY, cardW, cardH, TOOL_DRAW.borderRadius)
     ctx.fillStyle = isError
@@ -43,9 +52,22 @@ export function drawToolCalls(
     ctx.fill()
     ctx.strokeStyle = isError
       ? COLORS.error + '90'
-      : isSelected ? COLORS.holoBase + 'aa' : isRunning ? COLORS.tool + '60' : COLORS.return + '40'
-    ctx.lineWidth = isError ? 2 : isSelected ? 1.5 : 1
+      : isSelected ? COLORS.holoBase + 'aa'
+      : kindColor ? kindColor + 'cc'
+      : isRunning ? COLORS.tool + '60' : COLORS.return + '40'
+    ctx.lineWidth = isError ? 2 : isSelected ? 1.5 : kindColor ? 1.5 : 1
     ctx.stroke()
+
+    // A tick down the leading edge, so the kind survives at the zoom levels
+    // where a border colour stops being legible.
+    if (kindColor && !isError) {
+      ctx.beginPath()
+      ctx.moveTo(cardX + 1.5, cardY + 3)
+      ctx.lineTo(cardX + 1.5, cardY + cardH - 3)
+      ctx.strokeStyle = kindColor
+      ctx.lineWidth = 2.5
+      ctx.stroke()
+    }
 
     ctx.shadowBlur = 0
 

@@ -123,7 +123,13 @@ export function drawEdges(
     if (!cp) continue
     const { cp1x, cp1y, cp2x, cp2y } = cp
 
-    const beamColor = edge.type === 'tool' ? COLORS.tool : COLORS.holoBase
+    // The branch carries the kind as well as the card at its end: at a zoom
+    // where cards are too small to read, the lines still say which of these
+    // an agent reached for a capability on.
+    const beamColor = edge.type !== 'tool' ? COLORS.holoBase
+      : edge.kind === 'skill' ? COLORS.dispatch
+      : edge.kind === 'plugin' ? COLORS.contextReasoning
+      : COLORS.tool
     const bw = edge.type === 'tool' ? BEAM.tool : BEAM.parentChild
 
     ctx.save()

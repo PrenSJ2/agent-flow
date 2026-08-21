@@ -61,10 +61,16 @@ export interface MessageBubble {
 }
 
 // Rich tool call with actual content
+export type ToolKind = 'tool' | 'skill' | 'plugin'
+
 export interface ToolCallNode {
   id: string
   agentId: string
   toolName: string
+  /** What sort of call this is. A skill and a Bash command are both "a tool
+   *  call" to the transcript; only one is a capability being reached for.
+   *  Absent on older events, which read as plain tools. */
+  kind?: ToolKind
   state: 'running' | 'complete' | 'error'
   args: string          // human-readable argument summary
   result?: string       // human-readable result summary
@@ -132,6 +138,9 @@ export interface TimelineEvent {
 }
 
 export interface Edge {
+  /** For tool edges, what sort of call hangs off it — so the branch itself
+   *  shows a skill or a plugin, not just the card at its end. */
+  kind?: ToolKind
   id: string
   from: string
   to: string

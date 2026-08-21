@@ -22,7 +22,7 @@ import {
   generateSubagentFallbackName,
   resolveSubagentChildName,
 } from './constants'
-import { summarizeInput, summarizeResult, extractInputData, detectError, buildDiscovery, toolLabel } from './tool-summarizer'
+import { summarizeInput, summarizeResult, extractInputData, detectError, buildDiscovery, toolLabel, toolKind } from './tool-summarizer'
 import { estimateTokensFromContent, estimateTokensFromText } from './token-estimator'
 import { createLogger } from './logger'
 
@@ -306,6 +306,7 @@ export class TranscriptParser {
       payload: {
         agent: agentName,
         tool: label,
+        kind: toolKind(toolName),
         args,
         preview: `${label}: ${args}`.slice(0, PREVIEW_MAX),
         inputData: extractInputData(toolName, block.input),

@@ -2,6 +2,12 @@ import { COLORS } from '@/lib/colors'
 import { TOOL_DEDUP_WINDOW_S } from '@/lib/canvas-constants'
 import { pushTimelineBlock, type ProcessEventContext, type MutableEventState } from './process-event'
 import { appendConversation, asString, asBoolean, LABEL_LEN_PARTICLE, LABEL_LEN_TIMELINE } from './types'
+import type { ToolKind } from '@/lib/agent-types'
+
+/** Anything unrecognised is a plain tool: an older event has no kind at all. */
+function asToolKind(value: unknown): ToolKind {
+  return value === 'skill' || value === 'plugin' ? value : 'tool'
+}
 
 /** Extract file path from tool input data or fall back to first token of args */
 function extractFilePath(inputData?: Record<string, unknown>, args?: string): string {
@@ -46,6 +52,7 @@ export function handleToolCallStart(
 
     state.toolCalls.set(toolId, {
       id: toolId, agentId: agentName, toolName,
+      kind: asToolKind(payload.kind),
       state: 'running',
       args,
       inputData,
@@ -55,7 +62,10 @@ export function handleToolCallStart(
       opacity: 0,
     })
 
-    state.edges.push({ id: `edge-${toolId}`, from: agentName, to: toolId, type: 'tool', opacity: 0 })
+    state.edges.push({
+      id: `edge-${toolId}`, from: agentName, to: toolId, type: 'tool',
+      kind: asToolKind(payload.kind), opacity: 0,
+    })
 
     state.particles.push({
       id: `p-tc-${currentTime}-${toolId}`,
