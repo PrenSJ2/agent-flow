@@ -100,11 +100,42 @@ function broadcastEvent(event: AgentEvent) {
   broadcast(JSON.stringify({ type: 'agent-event', event }))
 }
 
+/**
+ * The working directory a transcript belongs to.
+ *
+ * Claude Code stores transcripts under `~/.claude/projects/<key>/<id>.jsonl`,
+ * where `<key>` is the absolute path with every `/` replaced by `-`. That
+ * encoding is lossy: `-Users-seb-Documents-Code-agent-flow` could be
+ * `.../Code/agent/flow` or `.../Code/agent-flow`, and a naive split on the
+ * last `-` labels the tab "flow".
+ *
+ * So candidates are tested against the filesystem from the right, longest
+ * repository name first, and the first one that actually exists wins. The
+ * relay runs on the same machine as the directories it is decoding, so this
+ * is a stat, not a guess.
+ */
+function cwdOfTranscript(filePath: string): string | undefined {
+  const key = path.basename(path.dirname(filePath))
+  if (!key.startsWith('-')) return undefined
+  const parts = key.slice(1).split('-')
+  for (let cut = 0; cut < parts.length; cut++) {
+    const candidate = '/' + parts.slice(0, parts.length - cut).join('/')
+      + (cut ? '/' + parts.slice(parts.length - cut).join('-') : '')
+    try {
+      if (fs.existsSync(candidate)) return candidate
+    } catch { /* unreadable is simply not a match */ }
+  }
+  return undefined
+}
+
 function broadcastSessionLifecycle(type: 'started' | 'ended' | 'updated', sessionId: string, label: string) {
   if (type === 'started') {
     broadcast(JSON.stringify({
       type: 'session-started',
-      session: { id: sessionId, label, status: 'active', startTime: Date.now(), lastActivityTime: Date.now() } as SessionInfo,
+      session: {
+        id: sessionId, label, cwd: sessions.get(sessionId)?.cwd,
+        status: 'active', startTime: Date.now(), lastActivityTime: Date.now(),
+      } as SessionInfo,
     }))
   } else if (type === 'ended') {
     broadcast(JSON.stringify({ type: 'session-ended', sessionId }))
@@ -207,6 +238,7 @@ function watchSession(sessionId: string, filePath: string) {
     inlineProgressAgents: new Set(),
     subagentsDirWatcher: null, subagentsDir: null,
     label: defaultLabel, labelSet: false,
+    cwd: cwdOfTranscript(filePath),
     model: null,
     modelDetectedAgents: new Map(),
     permissionTimer: null, permissionEmitted: false,
@@ -490,7 +522,10 @@ export async function createRelay(options: RelayOptions): Promise<Relay> {
       for (const session of sessions.values()) {
         if (!session.sessionDetected) continue
         sessionList.push({
-          id: session.sessionId, label: session.label,
+          // `cwd` here as well as on the lifecycle broadcast: this is the
+          // path a page load takes, so omitting it left every existing tab
+          // unnamed while only newly started ones got a repository.
+          id: session.sessionId, label: session.label, cwd: session.cwd,
           status: session.sessionCompleted ? 'completed' : 'active',
           startTime: session.sessionStartTime, lastActivityTime: session.lastActivityTime,
         })

@@ -31,6 +31,15 @@ export interface AgentEvent {
 export interface SessionInfo {
   id: string
   label: string
+  /**
+   * The working directory the session runs in.
+   *
+   * Optional because a session can be discovered before anything reports one.
+   * When present the tab is named and coloured by the repository rather than
+   * by a hash of the chat text, which is what makes a tab here and its
+   * terminal tab read as the same workspace.
+   */
+  cwd?: string
   status: 'active' | 'completed'
   startTime: number
   lastActivityTime: number
@@ -187,6 +196,8 @@ export interface WatchedSession {
   subagentsDirWatcher: import('fs').FSWatcher | null
   subagentsDir: string | null
   label: string
+  /** Where this session runs; see SessionInfo.cwd. */
+  cwd?: string
   labelSet: boolean
   model: string | null
   /** Maps agent names to their last emitted model ID — re-emits on model change */

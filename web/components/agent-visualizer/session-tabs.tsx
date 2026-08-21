@@ -42,10 +42,16 @@ export function SessionTabs({
         const hasActivity = sessionsWithActivity.has(session.id)
         // Green dot: session is active, OR has unseen background activity
         const showGreen = isActive || hasActivity
+        const project = projectOf(session.cwd ?? '')
         const projectColor = resolveTabColor(
           projectOf(session.cwd ?? session.label),
           session.cwd,
         )
+        // A session with no chat text yet carries "Session <id>", which says
+        // nothing the repository name does not say better. Showing
+        // "swarm - Session a1b2c3d4" would be noise on every fresh tab.
+        const isPlaceholder = /^Session [0-9a-f]+$/i.test(session.label)
+        const chat = isPlaceholder ? '' : session.label
 
         return (
           <button
@@ -75,7 +81,23 @@ export function SessionTabs({
                 animation: hasActivity && !isSelected ? 'pulse 1.5s infinite' : 'none',
               }}
             />
-            {session.label}
+            {/* Repository first and never truncated: it is the part that
+                identifies the workspace, and it is what the terminal tab and
+                the outline colour both key on. The chat text is the part that
+                gives way when the row runs out of room. */}
+            {project ? (
+              <>
+                <span style={{ flexShrink: 0 }}>{project}</span>
+                {chat && (
+                  <>
+                    <span style={{ opacity: 0.45, flexShrink: 0 }}>-</span>
+                    <span className="truncate" style={{ maxWidth: 160 }}>{chat}</span>
+                  </>
+                )}
+              </>
+            ) : (
+              <span className="truncate" style={{ maxWidth: 200 }}>{session.label}</span>
+            )}
             <span
               className="ml-0.5 opacity-0 group-hover:opacity-60 transition-opacity cursor-pointer"
               style={{ color: COLORS.tabClose, fontSize: 8, lineHeight: '10px' }}
