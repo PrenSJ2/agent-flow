@@ -1,6 +1,6 @@
 {
-  "name": "agent-flow",
-  "displayName": "Agent Flow",
+  "name": "tare-console",
+  "displayName": "tare console",
   "description": "Real-time visualization of Claude Code and Codex agent orchestration",
   "version": "0.9.1",
   "publisher": "simon-p",
@@ -13,8 +13,19 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Visualization", "Other"],
-  "keywords": ["llm", "agent", "claude", "codex", "ai", "visualization", "orchestration"],
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "llm",
+    "agent",
+    "claude",
+    "codex",
+    "ai",
+    "visualization",
+    "orchestration"
+  ],
   "activationEvents": [
     "onWebviewPanel:agentVisualizer"
   ],
@@ -54,7 +65,11 @@
       "properties": {
         "agentVisualizer.runtime": {
           "type": "string",
-          "enum": ["auto", "claude", "codex"],
+          "enum": [
+            "auto",
+            "claude",
+            "codex"
+          ],
           "enumDescriptions": [
             "Watch both Claude Code and Codex sessions concurrently (default)",
             "Watch only Claude Code sessions",

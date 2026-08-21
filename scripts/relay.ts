@@ -24,7 +24,7 @@ import { setLogLevel } from '../extension/src/logger'
 import type { TelemetryClient } from './telemetry'
 
 const MAX_EVENT_BUFFER = 5000
-const DISCOVERY_DIR = path.join(os.homedir(), '.claude', 'agent-flow')
+const DISCOVERY_DIR = path.join(os.homedir(), '.claude', 'tare-console')
 const CLAUDE_DIR = path.join(os.homedir(), '.claude', 'projects')
 
 let relayCreated = false
@@ -35,7 +35,7 @@ let sessionEventCount = 0
  *  parser and the Codex rollout parser). Read at session_end for telemetry. */
 const observedModels = new Set<string>()
 
-// agent-flow-app version. Inlined by esbuild at bundle time via `define`.
+// tare-console version. Inlined by esbuild at bundle time via `define`.
 // In dev (running from source via tsx), falls back to reading app/package.json.
 declare const AGENT_FLOW_APP_VERSION: string | undefined
 function resolveAgentFlowVersion(): string {
@@ -365,7 +365,7 @@ export interface RelayOptions {
   telemetry?: TelemetryClient
   /** Which runtimes to watch. Defaults to AGENT_FLOW_RUNTIME env var, or 'auto'.
    *  Mirrors the extension's `agentVisualizer.runtime` setting so users of the
-   *  dev relay and `npx agent-flow-app` have a way to opt out of one runtime. */
+   *  dev relay and `tare console` have a way to opt out of one runtime. */
   runtime?: RelayRuntimeMode
 }
 

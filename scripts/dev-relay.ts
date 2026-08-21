@@ -10,7 +10,7 @@ import { DEFAULT_RELAY_PORT, DEV_WEB_ORIGIN_PATTERN } from '../extension/src/con
 async function main() {
   const workspace = process.argv[2] || process.cwd()
 
-  console.log('Starting Agent Flow dev relay...\n')
+  console.log('Starting tare console dev relay...\n')
   console.log(`Workspace: ${workspace}`)
 
   const relay = await createRelay({ workspace, verbose: true })

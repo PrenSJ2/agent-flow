@@ -6,7 +6,7 @@ import * as path from 'path'
 import { createTelemetryClient, isTelemetryEnabled, TELEMETRY_ENDPOINT, TELEMETRY_PUBLISHABLE_KEY } from './telemetry'
 
 function setup() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'agent-flow-tel-'))
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'tare-console-tel-'))
 }
 
 function makeClient(dir: string) {

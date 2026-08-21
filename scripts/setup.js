@@ -7,7 +7,7 @@
  * to launch the extension in the debugger first.
  *
  * What it does:
- *   1. Installs the hook forwarding script at ~/.claude/agent-flow/hook.js
+ *   1. Installs the hook forwarding script at ~/.claude/tare-console/hook.js
  *   2. Configures Claude Code hooks in ~/.claude/settings.json
  */
 'use strict'
@@ -17,14 +17,18 @@ const path = require('path')
 const os = require('os')
 const { execFileSync } = require('child_process')
 
-const DISCOVERY_DIR = path.join(os.homedir(), '.claude', 'agent-flow')
+const DISCOVERY_DIR = path.join(os.homedir(), '.claude', 'tare-console')
 const HOOK_SCRIPT_PATH = path.join(DISCOVERY_DIR, 'hook.js')
 const SETTINGS_PATH = path.join(os.homedir(), '.claude', 'settings.json')
 
 const HOOK_TIMEOUT_S = 2
 const HOOK_SAFETY_MARGIN_MS = 500
 const HOOK_FORWARD_TIMEOUT_MS = 1000
-const HOOK_COMMAND_MARKER = 'agent-flow/hook.js'
+// Must track DISCOVERY_DIR. This is how setup recognises its OWN hooks when
+// installing and removing them -- left as 'agent-flow/hook.js' after the
+// directory moved, it would fail to find ours and would match an upstream
+// install's hooks instead, removing someone else's on uninstall.
+const HOOK_COMMAND_MARKER = 'tare-console/hook.js'
 
 // ─── Resolve node path ──────────────────────────────────────────────────────
 
@@ -55,7 +59,7 @@ const os = require('os');
 
 setTimeout(() => process.exit(0), ${HOOK_TIMEOUT_S * 1000 - HOOK_SAFETY_MARGIN_MS});
 
-const DIR = path.join(os.homedir(), '.claude', 'agent-flow');
+const DIR = path.join(os.homedir(), '.claude', 'tare-console');
 const IS_WIN = process.platform === 'win32';
 
 function normPath(p) {

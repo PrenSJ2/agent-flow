@@ -8,7 +8,7 @@ import { syncOnce } from './telemetry/sync'
  * Hardcoded telemetry endpoint + publishable key.
  *
  * These ship inside every published binary. No env var override, no runtime
- * fallback. All enabled installs send events to Agent Flow's Supabase project.
+ * fallback. All enabled installs send events to the upstream project's Supabase.
  * Forks that republish under a different name must edit these constants and
  * rebuild.
  *
@@ -53,9 +53,9 @@ export interface TelemetryEvent {
 }
 
 export interface TelemetryClientOptions {
-  /** Directory for events.jsonl and .cursor. Usually `~/.agent-flow/telemetry`. */
+  /** Directory for events.jsonl and .cursor. Usually `~/.tare-console/telemetry`. */
   logDir: string
-  /** Path to the stable install UUID. Usually `~/.agent-flow/installation-id`. */
+  /** Path to the stable install UUID. Usually `~/.tare-console/installation-id`. */
   installIdPath: string
   /** Override for tests. Defaults to `process.env`. */
   env?: NodeJS.ProcessEnv
