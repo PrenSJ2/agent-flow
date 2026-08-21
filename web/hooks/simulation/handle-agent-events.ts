@@ -4,7 +4,7 @@ import {
   emptyContextBreakdown,
 } from '@/lib/agent-types'
 import { COLORS } from '@/lib/colors'
-import { AGENT_SPAWN_DISTANCE } from '@/lib/canvas-constants'
+import { AGENT_SPAWN_DISTANCE, ROOT_SPAWN_DISTANCE } from '@/lib/canvas-constants'
 import { pushTimelineBlock, type ProcessEventContext, type MutableEventState } from './process-event'
 import { edgeId, asString, asBoolean } from './types'
 
@@ -70,6 +70,40 @@ export function handleAgentSpawn(
 
       x = parent.x + Math.cos(angle) * AGENT_SPAWN_DISTANCE
       y = parent.y + Math.sin(angle) * AGENT_SPAWN_DISTANCE
+    }
+  } else {
+    // A root: the head of its own session, with no parent to hang off.
+    //
+    // These used to spawn at exactly (0, 0), which is invisible with one
+    // session and useless with six -- every orchestrator stacked in one
+    // place. Coincident nodes are also the one case repulsion cannot fix,
+    // since there is no direction to push them apart in, so they stayed
+    // stacked rather than drifting free.
+    //
+    // Same largest-gap placement the children use, one ring out, so a new
+    // session lands in the emptiest part of the canvas rather than beside
+    // whichever root happened to arrive first.
+    const roots = []
+    for (const a of state.agents.values()) {
+      if (!a.parentId && a.id !== name) roots.push(a)
+    }
+    if (roots.length > 0) {
+      const angles = roots.map(a => Math.atan2(a.y, a.x)).sort((p, q) => p - q)
+      let bestGap = 0
+      let bestMid = angles[0] + Math.PI
+      for (let i = 0; i < angles.length; i++) {
+        const next = i + 1 < angles.length ? angles[i + 1] : angles[0] + Math.PI * 2
+        const gap = next - angles[i]
+        if (gap > bestGap) {
+          bestGap = gap
+          bestMid = angles[i] + gap / 2
+        }
+      }
+      // The ring grows as sessions accumulate: a fixed radius packs the
+      // seventh session hard against the first.
+      const ring = ROOT_SPAWN_DISTANCE * (1 + Math.floor(roots.length / 5) * 0.55)
+      x = Math.cos(bestMid) * ring
+      y = Math.sin(bestMid) * ring
     }
   }
 

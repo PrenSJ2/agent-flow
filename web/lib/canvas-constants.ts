@@ -37,6 +37,15 @@ export const MIN_VISIBLE_OPACITY = 0.05
 
 export const AGENT_SPAWN_DISTANCE = 250
 
+/**
+ * How far apart the roots of separate sessions start.
+ *
+ * Larger than AGENT_SPAWN_DISTANCE because each root is the centre of its own
+ * ring of children: place two roots one child-radius apart and their fleets
+ * interleave into a single unreadable mass.
+ */
+export const ROOT_SPAWN_DISTANCE = 620
+
 // ─── Tool call dedup window (seconds) ──────────────────────────────────────
 
 export const TOOL_DEDUP_WINDOW_S = 3
