@@ -269,7 +269,11 @@ export function AgentVisualizer() {
 
   return (
     <OpenFileProvider value={bridge.isVSCode ? openFile : null}>
-    <div className="h-screen w-screen relative overflow-hidden" style={{ background: COLORS.void }}>
+    {/* Fills its CONTAINER, not the viewport. `h-screen` was right upstream,
+        where this is the whole page; inside the tare shell it sits under a tab
+        bar, so 100vh pushed the bottom of the canvas -- and the control strip
+        on it -- below the fold by exactly the bar's height. */}
+    <div className="h-full w-full relative overflow-hidden" style={{ background: COLORS.void }}>
       {/* Empty state when no demo and no live data */}
       {isEmpty && (
         <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
