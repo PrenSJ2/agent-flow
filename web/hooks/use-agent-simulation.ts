@@ -269,8 +269,13 @@ export function useAgentSimulation(options: UseAgentSimulationOptions = {}) {
     // Force tick — updates agent positions in frameRef
     if (forceSimRef.current) forceSimRef.current.tick()
 
-    // Throttle React re-renders — UI updates at ~4/sec, canvas stays smooth via frameRef
-    if (newEvents.length > 0) {
+    // Throttle React re-renders — UI updates at ~4/sec, canvas stays smooth via frameRef.
+    //
+    // Gated on `newEvents.length > 0` alone, the clock froze during replay:
+    // currentTime advances in frameRef every frame, but between events nothing
+    // ever pushed it into React state, so the displayed timestamp sat still
+    // while the playhead moved. Playing is itself a reason to re-render.
+    if (newEvents.length > 0 || frameRef.current.isPlaying) {
       if (!lastUIUpdateRef.current || timestamp - lastUIUpdateRef.current >= UI_THROTTLE_MS) {
         setState(frameRef.current)
         lastUIUpdateRef.current = timestamp
