@@ -36,6 +36,17 @@ export const DOMAIN_COLORS: Record<string, string> = {
   other: '#7a8899',
 }
 
+// Node radius, driven by invocations. The floor keeps a never-invoked
+// capability visible -- most of them are -- and the ceiling stops the one
+// node with 165 invocations from swallowing its neighbours.
+const NODE_R_MIN = 3.5
+const NODE_R_MAX = 16
+const NODE_R_SCALE = 1.45
+
+// Where the layout is declared finished. Higher than the old 0.005 so it
+// settles in a couple of seconds rather than creeping for a minute.
+const ALPHA_FLOOR = 0.02
+
 export function SkillsPage() {
   const { data, reachable } = useHarness()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -50,8 +61,8 @@ export function SkillsPage() {
   // them through setState would re-render the whole page 60 times a second.
   const sim = useRef<{
     p: any[]; e: [number, number][]; pos: Map<string, { x: number; y: number }>
-    alpha: number; view: { x: number; y: number; k: number }
-  }>({ p: [], e: [], pos: new Map(), alpha: 0, view: { x: 0, y: 0, k: 1 } })
+    alpha: number; sig: string; view: { x: number; y: number; k: number }
+  }>({ p: [], e: [], pos: new Map(), alpha: 0, sig: '', view: { x: 0, y: 0, k: 1 } })
 
   const [zoomLabel, setZoomLabel] = useState('100%')
 
@@ -65,6 +76,12 @@ export function SkillsPage() {
   // put and the cross-domain edges stay visible.
   const domainRef = useRef<string | null>(null)
   domainRef.current = domain
+
+  // Read through a ref for the same reason as the query: selecting a node
+  // changes only what is highlighted, and having it in the effect's deps
+  // meant every click tore down the simulation and re-shook the layout.
+  const pickedRef = useRef<HarnessNode | null>(null)
+  pickedRef.current = picked
 
   useEffect(() => {
     const cv = canvasRef.current
@@ -89,28 +106,53 @@ export function SkillsPage() {
         x: prev?.x ?? cv.width / 2 + Math.cos(i * 2.4) * (140 + (i % 7) * 22),
         y: prev?.y ?? cv.height / 2 + Math.sin(i * 2.4) * (120 + (i % 5) * 18),
         vx: 0, vy: 0,
-        r: 3 + Math.min(7, Math.sqrt((n.t || 1) / 9)),
+        // Sized by how often it is actually invoked, not by what it costs.
+        // Token weight is what the vault cares about; on this graph the
+        // question is which capabilities carry the work -- and 24 of 209
+        // nodes have any usage at all, so the unused ones need to stay
+        // legible rather than vanish. Square root, because the top node has
+        // 165 invocations against a median of 5 among used ones and a linear
+        // scale would leave everything else as dots around it.
+        r: Math.min(NODE_R_MAX, NODE_R_MIN + NODE_R_SCALE * Math.sqrt(n.u || 0)),
       }
     })
     const index = new Map(state.p.map((p, i) => [p.n.i, i]))
     state.e = data.edges
       .filter(e => present.has(e.s) && present.has(e.d))
       .map(e => [index.get(e.s)!, index.get(e.d)!] as [number, number])
-    state.alpha = 1
+
+    // Reheat only when the graph actually changed shape.
+    //
+    // The payload polls every 15 seconds and arrives as a fresh object every
+    // time, so this effect re-ran and set alpha to 1 on every poll -- the
+    // whole layout shook itself apart and re-settled, for ever. That was the
+    // vibration: not the forces, the reheating.
+    const signature = `${keep.length}:${state.e.length}:${filter}`
+    state.alpha = signature === state.sig ? 0 : 1
+    state.sig = signature
 
     let raf = 0
     const frame = () => {
       const s = sim.current
-      if (s.alpha > 0.005) {
+      if (s.alpha > ALPHA_FLOOR) {
         s.alpha *= 0.985
+        // Every force is scaled by alpha, which is what makes the layout
+        // actually come to rest.
+        //
+        // Before this, alpha only decided WHETHER to run the simulation and
+        // the forces ran at full strength until it crossed the floor. Nodes
+        // reached the point where repulsion and springs balance, overshot,
+        // were pulled back, and overshot again -- a permanent jitter that
+        // never damped, because nothing ever got weaker.
+        const k = s.alpha
         const cx = cv.width / 2, cy = cv.height / 2
-        for (const p of s.p) { p.vx += (cx - p.x) * 0.0016; p.vy += (cy - p.y) * 0.0016 }
+        for (const p of s.p) { p.vx += (cx - p.x) * 0.0016 * k; p.vy += (cy - p.y) * 0.0016 * k }
         for (let i = 0; i < s.p.length; i++) for (let j = i + 1; j < s.p.length; j++) {
           const a = s.p[i], b = s.p[j]
           let dx = b.x - a.x, dy = b.y - a.y
           const d2 = dx * dx + dy * dy
           if (d2 > 42000 || d2 === 0) continue
-          const f = 210 / d2
+          const f = (210 / d2) * k
           dx *= f; dy *= f
           a.vx -= dx; a.vy -= dy; b.vx += dx; b.vy += dy
         }
@@ -119,7 +161,7 @@ export function SkillsPage() {
           if (!a || !b) continue
           const dx = b.x - a.x, dy = b.y - a.y
           const d = Math.hypot(dx, dy) || 1
-          const f = (d - 58) * 0.0045
+          const f = (d - 58) * 0.0045 * k
           a.vx += (dx / d) * f; a.vy += (dy / d) * f
           b.vx -= (dx / d) * f; b.vy -= (dy / d) * f
         }
@@ -135,7 +177,7 @@ export function SkillsPage() {
       for (const [i, j] of s.e) {
         const a = s.p[i], b = s.p[j]
         if (!a || !b) continue
-        const hot = picked && (a.n.i === picked.i || b.n.i === picked.i)
+        const hot = pickedRef.current && (a.n.i === pickedRef.current.i || b.n.i === pickedRef.current.i)
         ctx.strokeStyle = hot ? COLORS.complete : COLORS.holoBg10
         ctx.globalAlpha = hot ? 0.95 : 0.4
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
@@ -158,7 +200,7 @@ export function SkillsPage() {
         ctx.fillStyle = DOMAIN_COLORS[p.n.d] ?? DOMAIN_COLORS.other
         ctx.fill()
         if (p.n.u > 0) { ctx.strokeStyle = COLORS.holoBright; ctx.lineWidth = 1.3; ctx.stroke() }
-        if (picked && p.n.i === picked.i) {
+        if (pickedRef.current && p.n.i === pickedRef.current.i) {
           ctx.strokeStyle = COLORS.complete; ctx.lineWidth = 2 / view.k
           ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 4, 0, 6.2832); ctx.stroke()
         }
@@ -173,7 +215,9 @@ export function SkillsPage() {
           const match = !needle || (p.n.n + ' ' + (p.n.p ?? '')).toLowerCase().includes(needle)
           if (needle && !match) continue
           if (only && p.n.d !== only) continue
-          if (!needle && !only && !(p.r > 4 || p.n.u > 0)) continue
+          // Radius now IS usage, so the old `p.r > 4` said the same thing as
+          // the clause beside it. Labelled if it has ever been invoked.
+          if (!needle && !only && p.n.u === 0) continue
           ctx.fillText(p.n.n, p.x + p.r + 3 / view.k, p.y + 3 / view.k)
         }
       }
@@ -181,7 +225,7 @@ export function SkillsPage() {
     }
     raf = requestAnimationFrame(frame)
     return () => cancelAnimationFrame(raf)
-  }, [data, filter, picked])
+  }, [data, filter])
 
   // Wheel and pointer handlers are attached imperatively: wheel must be
   // non-passive to preventDefault (otherwise the page scrolls instead of the
