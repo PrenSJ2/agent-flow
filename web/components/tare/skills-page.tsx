@@ -22,6 +22,7 @@ export function SkillsPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [picked, setPicked] = useState<HarnessNode | null>(null)
   const [filter, setFilter] = useState<'all' | 'routed' | 'shelved'>('all')
+  const [query, setQuery] = useState('')
 
   // Positions live outside React state: they change every frame, and putting
   // them through setState would re-render the whole page 60 times a second.
@@ -31,6 +32,11 @@ export function SkillsPage() {
   }>({ p: [], e: [], pos: new Map(), alpha: 0, view: { x: 0, y: 0, k: 1 } })
 
   const [zoomLabel, setZoomLabel] = useState('100%')
+
+  // The draw loop reads the query through a ref: putting it in the effect's
+  // deps would tear down and restart the simulation on every keystroke.
+  const queryRef = useRef('')
+  queryRef.current = query.trim().toLowerCase()
 
   useEffect(() => {
     const cv = canvasRef.current
@@ -107,7 +113,14 @@ export function SkillsPage() {
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
       }
       ctx.globalAlpha = 1
+      const needle = queryRef.current
       for (const p of s.p) {
+        // A search dims non-matches rather than removing them: dropping nodes
+        // would tear holes in the graph and hide the very relationships you
+        // are searching for.
+        const match = !needle || (p.n.n + ' ' + (p.n.p ?? '') + ' ' + (p.n.pl ?? ''))
+          .toLowerCase().includes(needle)
+        ctx.globalAlpha = match ? 1 : 0.12
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.2832)
         ctx.fillStyle = p.n.s !== 'live' ? COLORS.idle : p.n.o === 'plugin' ? COLORS.tool : COLORS.complete
         ctx.fill()
@@ -117,11 +130,18 @@ export function SkillsPage() {
           ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 4, 0, 6.2832); ctx.stroke()
         }
       }
-      // Labels only once zoomed in: at 1x, 209 of them is noise.
-      if (view.k > 1.3) {
+      ctx.globalAlpha = 1
+      // Labels once zoomed in, or on the matches of a search at any zoom --
+      // an unlabelled highlight tells you something matched but not what.
+      if (view.k > 1.3 || needle) {
         ctx.fillStyle = COLORS.textMuted
         ctx.font = `${9 / view.k}px ui-monospace, monospace`
-        for (const p of s.p) if (p.r > 4 || p.n.u > 0) ctx.fillText(p.n.n, p.x + p.r + 3 / view.k, p.y + 3 / view.k)
+        for (const p of s.p) {
+          const match = !needle || (p.n.n + ' ' + (p.n.p ?? '')).toLowerCase().includes(needle)
+          if (needle && !match) continue
+          if (!needle && !(p.r > 4 || p.n.u > 0)) continue
+          ctx.fillText(p.n.n, p.x + p.r + 3 / view.k, p.y + 3 / view.k)
+        }
       }
       raf = requestAnimationFrame(frame)
     }
@@ -174,7 +194,11 @@ export function SkillsPage() {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
     }
-  }, [])
+    // Depends on `data`, NOT []. The canvas does not exist on first render --
+    // the component returns "reading…" until the fetch lands -- so an effect
+    // with empty deps ran once against a null ref and never attached
+    // anything. Pan and zoom silently did nothing.
+  }, [data])
 
   const resetView = () => {
     sim.current.view = { x: 0, y: 0, k: 1 }
@@ -234,6 +258,15 @@ export function SkillsPage() {
             }}
           >{f}</button>
         ))}
+        <input
+          type="search"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="search capabilities…"
+          className="px-2 py-0.5 rounded text-[10px] font-mono"
+          style={{ background: 'transparent', color: COLORS.textPrimary,
+                   border: `1px solid ${COLORS.holoBg10}`, outline: 'none', minWidth: 190 }}
+        />
         <button
           onClick={resetView}
           className="px-2 py-0.5 rounded text-[10px] font-mono"
