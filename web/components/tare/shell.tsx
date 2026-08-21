@@ -33,7 +33,7 @@ export function TareShell() {
       className="px-3 py-1 text-[11px] font-mono tracking-wider transition-colors"
       style={{
         background: view === id ? COLORS.holoBright : 'transparent',
-        color: view === id ? COLORS.bg : COLORS.textMuted,
+        color: view === id ? COLORS.void : COLORS.textMuted,
         border: 'none',
         cursor: 'pointer',
       }}
@@ -43,7 +43,7 @@ export function TareShell() {
   )
 
   return (
-    <div className="w-full h-full flex flex-col" style={{ background: COLORS.bg }}>
+    <div className="w-full h-full flex flex-col" style={{ background: COLORS.void }}>
       <div
         className="flex items-center gap-1 px-2 py-1 flex-shrink-0"
         style={{ borderBottom: `1px solid ${COLORS.holoBg10}` }}

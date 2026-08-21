@@ -17,11 +17,30 @@ import { useHarness, HARNESS_URL, type HarnessNode } from '@/hooks/use-harness'
  * 209 nodes and 419 edges is well within what canvas handles, and it keeps the
  * bundle unchanged.
  */
+/**
+ * One hue per domain, distinct enough to tell apart as 4px dots.
+ *
+ * The domains come from the server (tare's `categories.py`); anything it does
+ * not recognise arrives as `other` and takes the grey.
+ */
+export const DOMAIN_COLORS: Record<string, string> = {
+  code: '#66ccff',
+  marketing: '#ff9a3c',
+  video: '#cc88ff',
+  design: '#ff6b9d',
+  process: '#66ffaa',
+  infra: '#4ecdc4',
+  writing: '#ffd93d',
+  data: '#7c9aff',
+  other: '#7a8899',
+}
+
 export function SkillsPage() {
   const { data, reachable } = useHarness()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [picked, setPicked] = useState<HarnessNode | null>(null)
   const [filter, setFilter] = useState<'all' | 'routed' | 'shelved'>('all')
+  const [domain, setDomain] = useState<string | null>(null)
   const [query, setQuery] = useState('')
 
   // Positions live outside React state: they change every frame, and putting
@@ -37,6 +56,12 @@ export function SkillsPage() {
   // deps would tear down and restart the simulation on every keystroke.
   const queryRef = useRef('')
   queryRef.current = query.trim().toLowerCase()
+
+  // Same reasoning for the domain: picking one dims the rest of the graph
+  // rather than re-laying it out, so the positions you had just learned stay
+  // put and the cross-domain edges stay visible.
+  const domainRef = useRef<string | null>(null)
+  domainRef.current = domain
 
   useEffect(() => {
     const cv = canvasRef.current
@@ -114,15 +139,20 @@ export function SkillsPage() {
       }
       ctx.globalAlpha = 1
       const needle = queryRef.current
+      const only = domainRef.current
       for (const p of s.p) {
         // A search dims non-matches rather than removing them: dropping nodes
         // would tear holes in the graph and hide the very relationships you
         // are searching for.
-        const match = !needle || (p.n.n + ' ' + (p.n.p ?? '') + ' ' + (p.n.pl ?? ''))
-          .toLowerCase().includes(needle)
-        ctx.globalAlpha = match ? 1 : 0.12
+        const match = (!needle || (p.n.n + ' ' + (p.n.p ?? '') + ' ' + (p.n.pl ?? ''))
+          .toLowerCase().includes(needle)) && (!only || p.n.d === only)
+        // Shelved capabilities keep their domain hue at reduced strength.
+        // Colouring them grey would have made "shelved" and "unclassified" the
+        // same colour, and the whole point of the domain is to be visible
+        // whether or not the capability is currently loaded.
+        ctx.globalAlpha = match ? (p.n.s === 'live' ? 1 : 0.45) : 0.1
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.2832)
-        ctx.fillStyle = p.n.s !== 'live' ? COLORS.idle : p.n.o === 'plugin' ? COLORS.tool : COLORS.complete
+        ctx.fillStyle = DOMAIN_COLORS[p.n.d] ?? DOMAIN_COLORS.other
         ctx.fill()
         if (p.n.u > 0) { ctx.strokeStyle = COLORS.holoBright; ctx.lineWidth = 1.3; ctx.stroke() }
         if (picked && p.n.i === picked.i) {
@@ -133,13 +163,14 @@ export function SkillsPage() {
       ctx.globalAlpha = 1
       // Labels once zoomed in, or on the matches of a search at any zoom --
       // an unlabelled highlight tells you something matched but not what.
-      if (view.k > 1.3 || needle) {
+      if (view.k > 1.3 || needle || only) {
         ctx.fillStyle = COLORS.textMuted
         ctx.font = `${9 / view.k}px ui-monospace, monospace`
         for (const p of s.p) {
           const match = !needle || (p.n.n + ' ' + (p.n.p ?? '')).toLowerCase().includes(needle)
           if (needle && !match) continue
-          if (!needle && !(p.r > 4 || p.n.u > 0)) continue
+          if (only && p.n.d !== only) continue
+          if (!needle && !only && !(p.r > 4 || p.n.u > 0)) continue
           ctx.fillText(p.n.n, p.x + p.r + 3 / view.k, p.y + 3 / view.k)
         }
       }
@@ -230,6 +261,10 @@ export function SkillsPage() {
     return <div className="p-6 text-[11px] font-mono" style={{ color: COLORS.textMuted }}>reading…</div>
   }
 
+  const domainCounts = new Map<string, number>()
+  for (const n of data.nodes) domainCounts.set(n.d, (domainCounts.get(n.d) ?? 0) + 1)
+  const domains = [...domainCounts.entries()].sort((a, b) => b[1] - a[1])
+
   const shelved = data.nodes.filter(n => n.s !== 'live').length
   const reclaimed = data.totals.before - data.totals.live_tokens
   const outs = picked ? data.edges.filter(e => e.s === picked.i) : []
@@ -253,7 +288,7 @@ export function SkillsPage() {
             className="px-2 py-0.5 rounded text-[10px] font-mono"
             style={{
               background: filter === f ? COLORS.holoBright : 'transparent',
-              color: filter === f ? COLORS.bg : COLORS.textMuted,
+              color: filter === f ? COLORS.void : COLORS.textMuted,
               border: `1px solid ${COLORS.holoBg10}`,
             }}
           >{f}</button>
@@ -277,6 +312,43 @@ export function SkillsPage() {
         </span>
       </div>
 
+      {/* Domain row. Colour is the legend -- the dot beside each name is the
+          same hue the node takes on the canvas, so the row doubles as the key
+          for the graph rather than needing a separate one. */}
+      <div className="flex gap-1.5 items-center flex-wrap">
+        <button
+          onClick={() => setDomain(null)}
+          className="px-2 py-0.5 rounded text-[10px] font-mono"
+          style={{
+            background: domain === null ? COLORS.holoBright : 'transparent',
+            color: domain === null ? COLORS.void : COLORS.textMuted,
+            border: `1px solid ${COLORS.holoBg10}`,
+          }}
+        >every domain</button>
+        {domains.map(([name, count]) => {
+          const hue = DOMAIN_COLORS[name] ?? DOMAIN_COLORS.other
+          const on = domain === name
+          return (
+            <button
+              key={name}
+              onClick={() => setDomain(on ? null : name)}
+              className="px-2 py-0.5 rounded text-[10px] font-mono flex items-center gap-1.5"
+              style={{
+                background: on ? `${hue}22` : 'transparent',
+                color: on ? hue : COLORS.textMuted,
+                border: `1px solid ${on ? hue : COLORS.holoBg10}`,
+              }}
+            >
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%',
+                background: hue, display: 'inline-block', flexShrink: 0,
+              }} />
+              {name} <span style={{ opacity: 0.6 }}>{count}</span>
+            </button>
+          )
+        })}
+      </div>
+
       <div className="relative rounded" style={{ border: `1px solid ${COLORS.holoBg10}` }}>
         <canvas ref={canvasRef} width={1200} height={560} onClick={onClick}
                 className="w-full block" style={{ cursor: 'grab', touchAction: 'none' }} />
@@ -285,6 +357,13 @@ export function SkillsPage() {
             <div className="text-[11px] font-mono" style={{ color: COLORS.textPrimary }}>{picked.n}</div>
             <div className="text-[9px] font-mono mb-1" style={{ color: COLORS.textMuted }}>
               {picked.k} · {picked.s} · {picked.t} tok · {picked.u} use{picked.u === 1 ? '' : 's'}
+            </div>
+            {/* The deciding term is shown, not just the domain: grouping by
+                keyword gets things wrong, and a wrong grouping you can see the
+                reason for is one you can go and fix. */}
+            <div className="text-[9px] font-mono mb-1"
+                 style={{ color: DOMAIN_COLORS[picked.d] ?? DOMAIN_COLORS.other }}>
+              {picked.d}{picked.dw ? ` · matched “${picked.dw}”` : ' · nothing matched'}
             </div>
             {picked.p && <div className="text-[10px]" style={{ color: COLORS.textMuted }}>{picked.p}</div>}
             {outs.length > 0 && (

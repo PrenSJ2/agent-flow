@@ -20,6 +20,8 @@ export const HARNESS_URL = 'http://127.0.0.1:4242'
 export interface HarnessNode {
   i: string; n: string; k: string; o: string; s: string
   t: number; u: number; p: string; pl: string | null
+  /** Domain, and the term that put it there — see tare's `categories.py`. */
+  d: string; dw: string | null
 }
 
 export interface HarnessLearned {
