@@ -25,9 +25,12 @@ export function SkillsPage() {
 
   // Positions live outside React state: they change every frame, and putting
   // them through setState would re-render the whole page 60 times a second.
-  const sim = useRef<{ p: any[]; e: [number, number][]; pos: Map<string, { x: number; y: number }>; alpha: number }>({
-    p: [], e: [], pos: new Map(), alpha: 0,
-  })
+  const sim = useRef<{
+    p: any[]; e: [number, number][]; pos: Map<string, { x: number; y: number }>
+    alpha: number; view: { x: number; y: number; k: number }
+  }>({ p: [], e: [], pos: new Map(), alpha: 0, view: { x: 0, y: 0, k: 1 } })
+
+  const [zoomLabel, setZoomLabel] = useState('100%')
 
   useEffect(() => {
     const cv = canvasRef.current
@@ -89,8 +92,12 @@ export function SkillsPage() {
         for (const p of s.p) { p.x += (p.vx *= 0.86); p.y += (p.vy *= 0.86); s.pos.set(p.n.i, { x: p.x, y: p.y }) }
       }
 
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, cv.width, cv.height)
-      ctx.lineWidth = 1
+      const view = sim.current.view
+      ctx.translate(view.x, view.y)
+      ctx.scale(view.k, view.k)
+      ctx.lineWidth = 1 / view.k
       for (const [i, j] of s.e) {
         const a = s.p[i], b = s.p[j]
         if (!a || !b) continue
@@ -106,9 +113,15 @@ export function SkillsPage() {
         ctx.fill()
         if (p.n.u > 0) { ctx.strokeStyle = COLORS.holoBright; ctx.lineWidth = 1.3; ctx.stroke() }
         if (picked && p.n.i === picked.i) {
-          ctx.strokeStyle = COLORS.complete; ctx.lineWidth = 2
-          ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 4, 0, 6.2832); ctx.stroke(); ctx.lineWidth = 1
+          ctx.strokeStyle = COLORS.complete; ctx.lineWidth = 2 / view.k
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 4, 0, 6.2832); ctx.stroke()
         }
+      }
+      // Labels only once zoomed in: at 1x, 209 of them is noise.
+      if (view.k > 1.3) {
+        ctx.fillStyle = COLORS.textMuted
+        ctx.font = `${9 / view.k}px ui-monospace, monospace`
+        for (const p of s.p) if (p.r > 4 || p.n.u > 0) ctx.fillText(p.n.n, p.x + p.r + 3 / view.k, p.y + 3 / view.k)
       }
       raf = requestAnimationFrame(frame)
     }
@@ -116,13 +129,69 @@ export function SkillsPage() {
     return () => cancelAnimationFrame(raf)
   }, [data, filter, picked])
 
+  // Wheel and pointer handlers are attached imperatively: wheel must be
+  // non-passive to preventDefault (otherwise the page scrolls instead of the
+  // graph zooming), and React's onWheel is passive.
+  useEffect(() => {
+    const cv = canvasRef.current
+    if (!cv) return
+
+    const onWheel = (ev: WheelEvent) => {
+      ev.preventDefault()
+      const view = sim.current.view
+      const rect = cv.getBoundingClientRect()
+      const px = (ev.clientX - rect.left) * (cv.width / rect.width)
+      const py = (ev.clientY - rect.top) * (cv.height / rect.height)
+      const next = Math.min(6, Math.max(0.3, view.k * (ev.deltaY < 0 ? 1.12 : 0.89)))
+      // Anchor on the cursor: keep the world point under the pointer fixed,
+      // so zooming goes where you are looking rather than to the origin.
+      view.x = px - ((px - view.x) / view.k) * next
+      view.y = py - ((py - view.y) / view.k) * next
+      view.k = next
+      setZoomLabel(`${Math.round(next * 100)}%`)
+    }
+
+    let drag: { x: number; y: number; vx: number; vy: number } | null = null
+    const down = (ev: PointerEvent) => {
+      drag = { x: ev.clientX, y: ev.clientY, vx: sim.current.view.x, vy: sim.current.view.y }
+    }
+    const move = (ev: PointerEvent) => {
+      if (!drag) return
+      const cvRect = cv.getBoundingClientRect()
+      const scale = cv.width / cvRect.width
+      sim.current.view.x = drag.vx + (ev.clientX - drag.x) * scale
+      sim.current.view.y = drag.vy + (ev.clientY - drag.y) * scale
+    }
+    const up = () => { drag = null }
+
+    cv.addEventListener('wheel', onWheel, { passive: false })
+    cv.addEventListener('pointerdown', down)
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    return () => {
+      cv.removeEventListener('wheel', onWheel)
+      cv.removeEventListener('pointerdown', down)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+  }, [])
+
+  const resetView = () => {
+    sim.current.view = { x: 0, y: 0, k: 1 }
+    sim.current.alpha = Math.max(sim.current.alpha, 0.3)
+    setZoomLabel('100%')
+  }
+
   const onClick = (ev: React.MouseEvent<HTMLCanvasElement>) => {
     const cv = canvasRef.current
     if (!cv) return
     const rect = cv.getBoundingClientRect()
-    const x = (ev.clientX - rect.left) * (cv.width / rect.width)
-    const y = (ev.clientY - rect.top) * (cv.height / rect.height)
-    let best: HarnessNode | null = null, bd = 200
+    const view = sim.current.view
+    // Screen -> world: undo the pan and zoom the frame was drawn with, or
+    // clicks land on whatever was under that pixel before you zoomed.
+    const x = ((ev.clientX - rect.left) * (cv.width / rect.width) - view.x) / view.k
+    const y = ((ev.clientY - rect.top) * (cv.height / rect.height) - view.y) / view.k
+    let best: HarnessNode | null = null, bd = 200 / (view.k * view.k)
     for (const p of sim.current.p) {
       const d = (p.x - x) ** 2 + (p.y - y) ** 2
       if (d < bd) { bd = d; best = p.n }
@@ -165,14 +234,19 @@ export function SkillsPage() {
             }}
           >{f}</button>
         ))}
+        <button
+          onClick={resetView}
+          className="px-2 py-0.5 rounded text-[10px] font-mono"
+          style={{ background: 'transparent', color: COLORS.textMuted, border: `1px solid ${COLORS.holoBg10}` }}
+        >reset view</button>
         <span className="text-[10px] font-mono" style={{ color: COLORS.textMuted }}>
-          click a node · ring = used · size = tokens
+          {zoomLabel} · scroll to zoom · drag to pan · click a node · ring = used · size = tokens
         </span>
       </div>
 
       <div className="relative rounded" style={{ border: `1px solid ${COLORS.holoBg10}` }}>
         <canvas ref={canvasRef} width={1200} height={560} onClick={onClick}
-                className="w-full block" style={{ cursor: 'crosshair' }} />
+                className="w-full block" style={{ cursor: 'grab', touchAction: 'none' }} />
         {picked && (
           <div className="absolute top-3 right-3 p-3 rounded glass-card" style={{ width: 280 }}>
             <div className="text-[11px] font-mono" style={{ color: COLORS.textPrimary }}>{picked.n}</div>

@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo, useState } from 'react'
 import { COLORS } from '@/lib/colors'
 import { useHarness } from '@/hooks/use-harness'
 import { Stats, Unreachable } from './skills-page'
@@ -16,14 +17,39 @@ import { Stats, Unreachable } from './skills-page'
  */
 export function MemoryPage() {
   const { data, reachable } = useHarness()
+  const [query, setQuery] = useState('')
+  const needle = query.trim().toLowerCase()
+
+  // Filtering is computed, never destructive: the counts above always describe
+  // the whole record, so a search narrows what you read without quietly
+  // changing what the numbers mean.
+  const matches = useMemo(() => {
+    if (!data) return null
+    const hit = (...parts: (string | undefined)[]) =>
+      !needle || parts.some(p => (p ?? '').toLowerCase().includes(needle))
+    return {
+      learned: data.memory.learned.filter(l => hit(l.kind, l.subject, l.detail, ...l.evidence)),
+      projects: Object.entries(data.memory.projects).filter(([name, uses]) =>
+        hit(name, ...uses.map(([capability]) => capability))),
+      instructions: data.memory.instructions.filter(i => hit(i.proj, i.file)),
+    }
+  }, [data, needle])
 
   if (reachable === false) return <Unreachable />
   if (!data) {
     return <div className="p-6 text-[11px] font-mono" style={{ color: COLORS.textMuted }}>reading…</div>
   }
 
-  const { learned, projects, instructions, index_tokens: indexTokens, event_counts: counts } = data.memory
-  const gaps = learned.filter(l => l.kind === 'gap').length
+  const { index_tokens: indexTokens, event_counts: counts } = data.memory
+  const { learned, projects: projectPairs, instructions } = matches!
+  const projects = Object.fromEntries(projectPairs)
+
+  // Deliberately from the UNFILTERED record. These are totals, and a total
+  // that shrinks as you type reads as a match count -- so the frame of
+  // reference stays fixed while the lists below narrow.
+  const gaps = data.memory.learned.filter(l => l.kind === 'gap').length
+  const totalProjects = Object.keys(data.memory.projects).length
+  const totalInstructions = data.memory.instructions.length
 
   const weights = [
     { label: 'capability index (all projects)', tok: indexTokens, own: true },
@@ -41,19 +67,37 @@ export function MemoryPage() {
 
   return (
     <div className="p-4 h-full flex flex-col gap-5 overflow-auto">
+      <input
+        type="search"
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        placeholder="search findings, projects, capabilities, files…"
+        className="px-2 py-1 rounded text-[11px] font-mono w-full max-w-md"
+        style={{
+          background: 'transparent', color: COLORS.textPrimary,
+          border: `1px solid ${COLORS.holoBg10}`, outline: 'none',
+        }}
+      />
+
       <Stats items={[
         ['searches', String(counts.lookup ?? 0)],
         ['invocations mined', String(counts.invocation ?? 0)],
         ['gaps found', String(gaps)],
-        ['projects', String(Object.keys(projects).length)],
-        ['instruction files', String(instructions.length)],
+        ['projects', String(totalProjects)],
+        ['instruction files', String(totalInstructions)],
       ]} />
+      {needle && (
+        <div className="text-[10px] font-mono -mt-3" style={{ color: COLORS.textMuted }}>
+          showing {learned.length} finding(s), {projectPairs.length} project(s),
+          {' '}{instructions.length} instruction file(s) matching &quot;{query}&quot;
+        </div>
+      )}
 
       <section>
         <Heading>Learned from use</Heading>
         {learned.length === 0 ? (
           <div className="text-[10px] font-mono" style={{ color: COLORS.textMuted }}>
-            nothing yet — it learns from lookups and activations
+            {needle ? `nothing matching "${query}"` : 'nothing yet — it learns from lookups and activations'}
           </div>
         ) : (
           <div className="flex flex-col gap-2">
@@ -100,6 +144,11 @@ export function MemoryPage() {
 
       <section>
         <Heading>What each project leans on</Heading>
+        {ranked.length === 0 && (
+          <div className="text-[10px] font-mono mb-2" style={{ color: COLORS.textMuted }}>
+            no project matching &quot;{query}&quot;
+          </div>
+        )}
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))' }}>
           {ranked.map(p => (
             <div key={p.name} className="p-2 rounded" style={{ border: `1px solid ${COLORS.holoBg10}` }}>
