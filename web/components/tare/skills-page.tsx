@@ -42,6 +42,8 @@ export function SkillsPage() {
   const [picked, setPicked] = useState<HarnessNode | null>(null)
   const [filter, setFilter] = useState<'all' | 'routed' | 'shelved'>('all')
   const [domain, setDomain] = useState<string | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
+  const [openResult, setOpenResult] = useState<string>('')
   const [query, setQuery] = useState('')
 
   // Positions live outside React state: they change every frame, and putting
@@ -368,6 +370,43 @@ export function SkillsPage() {
               {picked.d}{picked.dw ? ` · matched “${picked.dw}”` : ' · nothing matched'}
             </div>
             {picked.p && <div className="text-[10px]" style={{ color: COLORS.textMuted }}>{picked.p}</div>}
+
+            {/* Where it lives, and a way in. The path is the answer to "which
+                file do I edit"; the button saves the round trip through a
+                terminal. The server resolves the id to a path itself, so no
+                path is ever sent from here -- see tare's `open_capability`. */}
+            {picked.f && (
+              <div className="mt-2 flex flex-col gap-1">
+                <button
+                  onClick={() => { navigator.clipboard?.writeText(picked.f); setCopied(picked.i) }}
+                  className="text-left text-[9px] font-mono break-all"
+                  style={{ color: COLORS.textMuted, background: 'transparent',
+                           border: 'none', padding: 0, cursor: 'pointer' }}
+                  title="click to copy the path"
+                >
+                  {copied === picked.i ? 'copied ✓' : picked.f}
+                </button>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => openCapability(picked.i, setOpenResult)}
+                    className="px-1.5 py-0.5 rounded text-[9px] font-mono"
+                    style={{ background: 'transparent', color: COLORS.textPrimary,
+                             border: `1px solid ${COLORS.holoBg10}`, cursor: 'pointer' }}
+                  >open</button>
+                  {picked.pl && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono"
+                          style={{ color: COLORS.tool, border: `1px solid ${COLORS.holoBg10}` }}>
+                      {picked.pl} plugin
+                    </span>
+                  )}
+                </div>
+                {openResult && (
+                  <div className="text-[9px] font-mono" style={{ color: COLORS.textMuted }}>
+                    {openResult}
+                  </div>
+                )}
+              </div>
+            )}
             {outs.length > 0 && (
               <ul className="mt-2 text-[9px] font-mono list-none p-0" style={{ color: COLORS.textMuted }}>
                 {outs.slice(0, 8).map(e => <li key={e.d}>routes to {byId.get(e.d)?.n ?? e.d}</li>)}
@@ -383,6 +422,27 @@ export function SkillsPage() {
       </div>
     </div>
   )
+}
+
+/**
+ * Ask the harness to open a capability's own file.
+ *
+ * The id goes over, never a path: the server resolves it through the graph,
+ * so the only things this can open are capabilities that already exist.
+ */
+async function openCapability(id: string, report: (message: string) => void) {
+  try {
+    const res = await fetch(`${HARNESS_URL}/api/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    const data = await res.json()
+    report(data.ok ? `opened ${data.detail}` : `could not open: ${data.detail}`)
+  } catch {
+    // The API is a separate process and may simply not be up.
+    report('could not reach the harness API')
+  }
 }
 
 export function Stats({ items }: { items: [string, string][] }) {

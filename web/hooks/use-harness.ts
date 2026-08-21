@@ -22,6 +22,8 @@ export interface HarnessNode {
   t: number; u: number; p: string; pl: string | null
   /** Domain, and the term that put it there — see tare's `categories.py`. */
   d: string; dw: string | null
+  /** Where the capability lives on disk, home-shortened. '' when unknown. */
+  f: string
 }
 
 export interface HarnessLearned {
