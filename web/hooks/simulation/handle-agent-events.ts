@@ -4,9 +4,81 @@ import {
   emptyContextBreakdown,
 } from '@/lib/agent-types'
 import { COLORS } from '@/lib/colors'
-import { AGENT_SPAWN_DISTANCE, ROOT_SPAWN_DISTANCE } from '@/lib/canvas-constants'
+import { AGENT_SPAWN_DISTANCE, ROOT_SPACING } from '@/lib/canvas-constants'
 import { pushTimelineBlock, type ProcessEventContext, type MutableEventState } from './process-event'
 import { edgeId, asString, asBoolean } from './types'
+
+function countRoots(state: MutableEventState, exclude: string): number {
+  let n = 0
+  for (const a of state.agents.values()) if (!a.parentId && a.id !== exclude) n++
+  return n
+}
+
+/**
+ * Lay every session root out evenly on one ring.
+ *
+ * Called whenever a root appears, because the ring's size depends on how many
+ * there are: placing each new root at the widest gap and leaving the others
+ * alone gave a lumpy ring whose radius was chosen for whatever the count
+ * happened to be at the time.
+ *
+ * The radius is derived from the neighbour spacing rather than fixed --
+ * `spacing / (2 sin(pi/n))` is the circle on which n points sit exactly
+ * `spacing` apart -- so two sessions sit close together and twelve spread out
+ * only as far as they must. A fixed radius does the opposite: needlessly wide
+ * for two, cramped for twelve.
+ *
+ * Children move with their root. Without that the re-layout tears each fleet
+ * apart and leaves subagents orbiting where their parent used to be.
+ *
+ * A pinned root is one the operator dragged somewhere deliberately, so it is
+ * left exactly where it was put and simply takes its place in the order.
+ */
+export function respaceRoots(state: MutableEventState): void {
+  const roots = []
+  for (const a of state.agents.values()) if (!a.parentId) roots.push(a)
+  if (roots.length < 2) return
+
+  // Stable order, so an arriving root does not permute the ones already
+  // placed and send every fleet sliding to a new spoke.
+  roots.sort((a, b) => (a.spawnTime - b.spawnTime) || a.id.localeCompare(b.id))
+
+  const n = roots.length
+  const radius = ROOT_SPACING / (2 * Math.sin(Math.PI / n))
+
+  // Which root each agent belongs to, so children can be carried along.
+  const rootOf = new Map<string, string>()
+  for (const agent of state.agents.values()) {
+    let cursor = agent
+    const seen = new Set<string>()
+    while (cursor.parentId && !seen.has(cursor.id)) {
+      seen.add(cursor.id)
+      const parent = state.agents.get(cursor.parentId)
+      if (!parent) break
+      cursor = parent
+    }
+    rootOf.set(agent.id, cursor.id)
+  }
+
+  const shift = new Map<string, { dx: number; dy: number }>()
+  roots.forEach((root, i) => {
+    if (root.pinned) return
+    const angle = (i / n) * Math.PI * 2
+    const nx = Math.cos(angle) * radius
+    const ny = Math.sin(angle) * radius
+    shift.set(root.id, { dx: nx - root.x, dy: ny - root.y })
+    root.x = nx
+    root.y = ny
+  })
+
+  for (const agent of state.agents.values()) {
+    if (!agent.parentId) continue
+    const delta = shift.get(rootOf.get(agent.id) ?? '')
+    if (!delta) continue
+    agent.x += delta.dx
+    agent.y += delta.dy
+  }
+}
 
 export function handleAgentSpawn(
   payload: Record<string, unknown>,
@@ -74,37 +146,19 @@ export function handleAgentSpawn(
   } else {
     // A root: the head of its own session, with no parent to hang off.
     //
-    // These used to spawn at exactly (0, 0), which is invisible with one
-    // session and useless with six -- every orchestrator stacked in one
-    // place. Coincident nodes are also the one case repulsion cannot fix,
-    // since there is no direction to push them apart in, so they stayed
-    // stacked rather than drifting free.
+    // These used to spawn at exactly (0, 0). Invisible with one session and
+    // useless with six -- every orchestrator stacked in one spot. Coincident
+    // nodes are also the one case the repulsion force cannot resolve, since
+    // there is no direction to separate them along, so they stayed put.
     //
-    // Same largest-gap placement the children use, one ring out, so a new
-    // session lands in the emptiest part of the canvas rather than beside
-    // whichever root happened to arrive first.
-    const roots = []
-    for (const a of state.agents.values()) {
-      if (!a.parentId && a.id !== name) roots.push(a)
-    }
-    if (roots.length > 0) {
-      const angles = roots.map(a => Math.atan2(a.y, a.x)).sort((p, q) => p - q)
-      let bestGap = 0
-      let bestMid = angles[0] + Math.PI
-      for (let i = 0; i < angles.length; i++) {
-        const next = i + 1 < angles.length ? angles[i + 1] : angles[0] + Math.PI * 2
-        const gap = next - angles[i]
-        if (gap > bestGap) {
-          bestGap = gap
-          bestMid = angles[i] + gap / 2
-        }
-      }
-      // The ring grows as sessions accumulate: a fixed radius packs the
-      // seventh session hard against the first.
-      const ring = ROOT_SPAWN_DISTANCE * (1 + Math.floor(roots.length / 5) * 0.55)
-      x = Math.cos(bestMid) * ring
-      y = Math.sin(bestMid) * ring
-    }
+    // The real placement happens in `respaceRoots` below, once this agent is
+    // in the map: every root has to move when a new one arrives, or the ring
+    // is sized for a count that no longer holds. Starting off-origin only
+    // avoids a one-frame flash at the centre.
+    const rootCount = countRoots(state, name)
+    const angle = rootCount * 2.399963  // golden angle: never repeats a spoke
+    x = Math.cos(angle) * ROOT_SPACING
+    y = Math.sin(angle) * ROOT_SPACING
   }
 
   const agent: Agent = {
@@ -123,6 +177,10 @@ export function handleAgentSpawn(
     messageBubbles: [],
   }
   state.agents.set(name, agent)
+
+  // A new root changes the ring every other root sits on, so the layout is
+  // recomputed here rather than guessed at spawn time.
+  if (!parentId) respaceRoots(state)
 
   if (parentId) {
     state.edges.push({ id: edgeId(parentId, name), from: parentId, to: name, type: 'parent-child', opacity: 0 })

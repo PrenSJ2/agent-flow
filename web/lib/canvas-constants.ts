@@ -38,13 +38,21 @@ export const MIN_VISIBLE_OPACITY = 0.05
 export const AGENT_SPAWN_DISTANCE = 250
 
 /**
- * How far apart the roots of separate sessions start.
+ * How far apart two NEIGHBOURING session roots sit.
  *
- * Larger than AGENT_SPAWN_DISTANCE because each root is the centre of its own
- * ring of children: place two roots one child-radius apart and their fleets
- * interleave into a single unreadable mass.
+ * Neighbour spacing rather than ring radius, because the radius is what the
+ * count decides: six roots on a 620 ring span 1,240 plus their children, the
+ * view zooms out to fit, and the node names stop being readable -- which is
+ * the whole point of showing them.
+ *
+ * So the ring is derived from this instead (see `respaceRoots`), and the
+ * layout stays as tight as the number of sessions allows.
+ *
+ * It sits a little under two child radii, which means adjacent fleets can
+ * graze each other when both are busy. That is deliberate: reading the names
+ * matters more than guaranteed separation, and repulsion settles the overlap.
  */
-export const ROOT_SPAWN_DISTANCE = 620
+export const ROOT_SPACING = 460
 
 // ─── Tool call dedup window (seconds) ──────────────────────────────────────
 
