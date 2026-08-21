@@ -28,10 +28,32 @@ export interface HarnessLearned {
   kind: string; subject: string; detail: string; evidence: string[]
 }
 
+export interface HarnessHistoryEntry {
+  id: string; n: string; k: string; pl: string | null; s: string
+  born: string | null; changed: string | null; last_edit: string | null
+  edit_count: number
+  edits: { ts: string; tool: string; project: string; file: string; session: string }[]
+}
+
+export interface HarnessHistory {
+  added: HarnessHistoryEntry[]
+  evolved: HarnessHistoryEntry[]
+  session_edited: HarnessHistoryEntry[]
+  installed: HarnessHistoryEntry[]
+  counts: {
+    own: number; from_plugins: number
+    session_edited: number; authored_outside_sessions: number
+  }
+}
+
 export interface HarnessData {
   totals: { live_tokens: number; never_invoked_tokens: number; before: number }
   nodes: HarnessNode[]
   edges: { s: string; d: string }[]
+  /** Optional: the API is a separately-versioned process, and an older one
+   *  simply does not send this. A missing field must degrade, not white-screen
+   *  the page -- which is exactly what it did before this was optional. */
+  history?: HarnessHistory
   memory: {
     learned: HarnessLearned[]
     projects: Record<string, [string, number][]>

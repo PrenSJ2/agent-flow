@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { COLORS } from '@/lib/colors'
 import { useHarness, HARNESS_URL, type HarnessNode } from '@/hooks/use-harness'
+import { HistorySidebar } from './history-sidebar'
 
 /**
  * The capability graph: everything this machine can do, and what knowing about
@@ -349,7 +350,8 @@ export function SkillsPage() {
         })}
       </div>
 
-      <div className="relative rounded" style={{ border: `1px solid ${COLORS.holoBg10}` }}>
+      <div className="flex gap-3 items-stretch">
+      <div className="relative rounded flex-1 min-w-0" style={{ border: `1px solid ${COLORS.holoBg10}` }}>
         <canvas ref={canvasRef} width={1200} height={560} onClick={onClick}
                 className="w-full block" style={{ cursor: 'grab', touchAction: 'none' }} />
         {picked && (
@@ -373,6 +375,10 @@ export function SkillsPage() {
               </ul>
             )}
           </div>
+        )}
+      </div>
+        {data.history && (
+          <HistorySidebar history={data.history} nodes={data.nodes} onPick={setPicked} />
         )}
       </div>
     </div>
